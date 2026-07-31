@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "tauri-appws-manager",
+  "productName": "CodeSpace",
   "version": "0.1.0",
-  "identifier": "com.dscarsi.ws-manager",
+  "identifier": "com.dscarsi.codespace",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "tauri-appws-manager",
-        "width": 800,
-        "height": 600
+        "title": "CodeSpace",
+        "width": 900,
+        "height": 700,
+        "minWidth": 600,
+        "minHeight": 400
       }
     ],
     "security": {
