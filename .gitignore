@@ -18,6 +18,13 @@ dist-ssr
 .idea
 .DS_Store
 *.suo
+
+# Rust / Tauri
+src-tauri/target/
+.cargo/
+
+# Agents (local work files, not for commit)
+agents/
 *.ntvs*
 *.njsproj
 *.sln
