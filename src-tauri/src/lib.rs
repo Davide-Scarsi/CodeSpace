@@ -14,6 +14,7 @@ pub struct WorkspaceInfo {
     pub path: String,
     pub name: String,
     pub display_path: String,
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -99,6 +100,7 @@ fn scan_drive(drive_root: &Path) -> Vec<WorkspaceInfo> {
                     path: path.to_string_lossy().to_string(),
                     name,
                     display_path,
+                    color: None,
                 });
             }
         }
@@ -128,6 +130,7 @@ fn quick_scan(cache: &Cache) -> Vec<WorkspaceInfo> {
                 path: entry.path.clone(),
                 name,
                 display_path,
+                color: None,
             });
             cached_paths.insert(entry.path.clone(), true);
         }
@@ -180,6 +183,7 @@ fn quick_scan(cache: &Cache) -> Vec<WorkspaceInfo> {
                             path: path_str,
                             name,
                             display_path,
+                            color: None,
                         });
                     }
                 }
@@ -245,6 +249,55 @@ fn load_cache(app: &tauri::AppHandle) -> Option<Cache> {
     None
 }
 
+// ── Peacock Color ─────────────────────────────────────────────
+
+/// Reads the Peacock color from a workspace's .vscode/settings.json.
+/// Looks for `peacock.color` first, then falls back to
+/// `workbench.colorCustomizations.titleBar.activeBackground`.
+fn read_peacock_color(workspace_path: &str) -> Option<String> {
+    let ws_file = Path::new(workspace_path);
+    let project_dir = ws_file.parent()?;
+    let settings_path = project_dir.join(".vscode").join("settings.json");
+
+    let content = fs::read_to_string(&settings_path).ok()?;
+    let settings: serde_json::Value = serde_json::from_str(&content).ok()?;
+
+    // Try peacock.color first
+    if let Some(color) = settings
+        .get("peacock.color")
+        .and_then(|v| v.as_str())
+    {
+        return Some(color.to_string());
+    }
+
+    // Fallback to workbench.colorCustomizations
+    let customizations = settings.get("workbench.colorCustomizations")?;
+    if let Some(color) = customizations.get("titleBar.activeBackground").and_then(|v| v.as_str()) {
+        return Some(color.to_string());
+    }
+    if let Some(color) = customizations.get("activityBar.background").and_then(|v| v.as_str()) {
+        return Some(color.to_string());
+    }
+    // Pick any first color value from the object
+    if let Some(obj) = customizations.as_object() {
+        for (_key, val) in obj {
+            if let Some(c) = val.as_str() {
+                if c.starts_with('#') {
+                    return Some(c.to_string());
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn populate_colors(workspaces: &mut [WorkspaceInfo]) {
+    for ws in workspaces.iter_mut() {
+        ws.color = read_peacock_color(&ws.path);
+    }
+}
+
 // ── Tauri Commands ─────────────────────────────────────────────
 
 #[tauri::command]
@@ -260,6 +313,7 @@ fn scan_workspaces(app: tauri::AppHandle, force_full: bool) -> Vec<WorkspaceInfo
     // Sort alphabetically by name
     workspaces.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 
+    populate_colors(&mut workspaces);
     save_cache(&app, &workspaces);
     workspaces
 }
@@ -275,6 +329,53 @@ fn launch_workspace(path: String) -> Result<(), String> {
         Ok(_) => Ok(()),
         Err(e) => Err(format!("Failed to launch: {}", e)),
     }
+}
+
+#[tauri::command]
+fn get_workspace_color(workspace_path: String) -> Option<String> {
+    read_peacock_color(&workspace_path)
+}
+
+#[tauri::command]
+fn set_workspace_color(workspace_path: String, color: String) -> Result<(), String> {
+    let ws_file = Path::new(&workspace_path);
+    let project_dir = ws_file.parent().ok_or("Invalid workspace path")?;
+    let vscode_dir = project_dir.join(".vscode");
+    let settings_path = vscode_dir.join("settings.json");
+
+    // Read existing settings or start fresh
+    let mut settings: serde_json::Value = if settings_path.exists() {
+        let content = fs::read_to_string(&settings_path)
+            .map_err(|e| format!("Cannot read settings.json: {}", e))?;
+        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
+    } else {
+        fs::create_dir_all(&vscode_dir)
+            .map_err(|e| format!("Cannot create .vscode dir: {}", e))?;
+        serde_json::json!({})
+    };
+
+    // Set peacock.color
+    settings["peacock.color"] = serde_json::Value::String(color.clone());
+
+    // Also set workbench colors like Peacock does
+    if settings.get("workbench.colorCustomizations").is_none() {
+        settings["workbench.colorCustomizations"] = serde_json::json!({});
+    }
+    let wb = &mut settings["workbench.colorCustomizations"];
+
+    wb["titleBar.activeBackground"] = serde_json::Value::String(color.clone());
+    wb["titleBar.activeForeground"] = serde_json::Value::String("#ffffff".into());
+    wb["activityBar.background"] = serde_json::Value::String(color.clone());
+    wb["activityBar.foreground"] = serde_json::Value::String("#ffffff".into());
+    wb["statusBar.background"] = serde_json::Value::String(color.clone());
+    wb["statusBar.foreground"] = serde_json::Value::String("#ffffff".into());
+
+    let json = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("Cannot serialize: {}", e))?;
+    fs::write(&settings_path, json)
+        .map_err(|e| format!("Cannot write settings.json: {}", e))?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -301,6 +402,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             scan_workspaces,
             launch_workspace,
+            get_workspace_color,
+            set_workspace_color,
             get_scan_info,
         ])
         .run(tauri::generate_context!())

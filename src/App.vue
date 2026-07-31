@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import VscodeIcon from "./components/VscodeIcon.vue";
 
 // ── Types ─────────────────────────────────────────────────
 interface WorkspaceInfo {
   path: string;
   name: string;
   display_path: string;
+  color: string | null;
 }
 
 // ── State ────────────────────────────────────────────────
@@ -15,6 +17,10 @@ const scanInfo = ref({ has_cache: false, count: 0, last_scan: 0 });
 const scanning = ref(false);
 const searchQuery = ref("");
 const statusMessage = ref("");
+
+// Context menu
+const contextMenu = ref<{ x: number; y: number; ws: WorkspaceInfo } | null>(null);
+const colorPickerInput = ref<HTMLInputElement | null>(null);
 
 // ── Computed ─────────────────────────────────────────────
 const filteredWorkspaces = computed(() => {
@@ -62,12 +68,54 @@ async function launchWorkspace(path: string) {
   }
 }
 
+// ── Context Menu ─────────────────────────────────────────
+function onContextMenu(e: MouseEvent, ws: WorkspaceInfo) {
+  e.preventDefault();
+  contextMenu.value = { x: e.clientX, y: e.clientY, ws };
+  // Let the DOM render, then focus the color input
+  requestAnimationFrame(() => {
+    colorPickerInput.value?.click();
+  });
+}
+
+function closeContextMenu() {
+  contextMenu.value = null;
+}
+
+function onContextMenuClick(e: MouseEvent) {
+  // Close if clicking outside the menu
+  if ((e.target as HTMLElement).closest(".context-menu") === null) {
+    closeContextMenu();
+  }
+}
+
+async function onChangeColor(ws: WorkspaceInfo, color: string) {
+  try {
+    await invoke("set_workspace_color", { workspacePath: ws.path, color });
+    ws.color = color;
+    statusMessage.value = `Color set to ${color} for ${ws.name}`;
+  } catch (e) {
+    statusMessage.value = `Error setting color: ${e}`;
+  }
+  closeContextMenu();
+}
+
+function onColorInput(e: Event, ws: WorkspaceInfo) {
+  const color = (e.target as HTMLInputElement).value;
+  onChangeColor(ws, color);
+}
+
 // ── Lifecycle ────────────────────────────────────────────
 onMounted(async () => {
+  document.addEventListener("click", onContextMenuClick);
   await loadScanInfo();
   if (scanInfo.value.has_cache) {
     await scan(false);
   }
+});
+
+onUnmounted(() => {
+  document.removeEventListener("click", onContextMenuClick);
 });
 </script>
 
@@ -129,17 +177,37 @@ onMounted(async () => {
         :key="ws.path"
         class="ws-card"
         @click="launchWorkspace(ws.path)"
+        @contextmenu="onContextMenu($event, ws)"
       >
-        <div class="ws-icon">📁</div>
+        <div class="ws-icon">
+          <VscodeIcon :color="ws.color" :size="28" />
+        </div>
         <div class="ws-info">
           <span class="ws-name">{{ ws.name }}</span>
           <span class="ws-path">{{ ws.display_path }}</span>
         </div>
-        <div class="ws-actions">
-          <span class="ws-badge">WS</span>
-        </div>
       </div>
     </div>
+
+    <!-- Context Menu -->
+    <Teleport to="body">
+      <div
+        v-if="contextMenu"
+        class="context-menu"
+        :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+        @click.stop
+      >
+        <div class="context-menu-item">
+          <span>🎨 Peacock color</span>
+          <input
+            ref="colorPickerInput"
+            type="color"
+            :value="contextMenu.ws.color ?? '#32B5F1'"
+            @input="onColorInput($event, contextMenu.ws)"
+          />
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -348,10 +416,12 @@ body {
 }
 
 .ws-icon {
-  font-size: 18px;
   flex-shrink: 0;
   width: 28px;
-  text-align: center;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ws-info {
@@ -376,17 +446,50 @@ body {
   margin-top: 1px;
 }
 
-.ws-actions {
-  flex-shrink: 0;
+/* ── Context menu ─────────────────────────────────────── */
+.context-menu {
+  position: fixed;
+  z-index: 9999;
+  background: #1c2128;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 220px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
-.ws-badge {
-  font-size: 10px;
-  font-weight: 600;
-  color: #0d1117;
-  background: #58a6ff;
-  padding: 2px 6px;
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #c9d1d9;
+  border-radius: 4px;
+  cursor: default;
+}
+
+.context-menu-item:hover {
+  background: #30363d;
+}
+
+.context-menu-item input[type="color"] {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 1px;
+  background: transparent;
+}
+
+.context-menu-item input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.context-menu-item input[type="color"]::-webkit-color-swatch {
+  border: none;
   border-radius: 3px;
-  text-transform: uppercase;
 }
 </style>
