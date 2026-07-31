@@ -393,11 +393,12 @@ fn get_workspace_color(workspace_path: String) -> Option<String> {
 fn set_workspace_color(workspace_path: String, color: String) -> Result<(), String> {
     let ws_file = Path::new(&workspace_path);
     let project_dir = ws_file.parent().ok_or("Invalid workspace path")?;
+
+    // ── 1. Write to .vscode/settings.json ─────────────────
     let vscode_dir = project_dir.join(".vscode");
     let settings_path = vscode_dir.join("settings.json");
 
-    // Read existing settings or start fresh
-    let mut settings: serde_json::Value = if settings_path.exists() {
+    let mut folder_settings: serde_json::Value = if settings_path.exists() {
         let content = fs::read_to_string(&settings_path)
             .map_err(|e| format!("Cannot read settings.json: {}", e))?;
         serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
@@ -407,28 +408,46 @@ fn set_workspace_color(workspace_path: String, color: String) -> Result<(), Stri
         serde_json::json!({})
     };
 
-    // Set peacock.color
-    settings["peacock.color"] = serde_json::Value::String(color.clone());
-
-    // Also set workbench colors like Peacock does
-    if settings.get("workbench.colorCustomizations").is_none() {
-        settings["workbench.colorCustomizations"] = serde_json::json!({});
-    }
-    let wb = &mut settings["workbench.colorCustomizations"];
-
-    wb["titleBar.activeBackground"] = serde_json::Value::String(color.clone());
-    wb["titleBar.activeForeground"] = serde_json::Value::String("#ffffff".into());
-    wb["activityBar.background"] = serde_json::Value::String(color.clone());
-    wb["activityBar.foreground"] = serde_json::Value::String("#ffffff".into());
-    wb["statusBar.background"] = serde_json::Value::String(color.clone());
-    wb["statusBar.foreground"] = serde_json::Value::String("#ffffff".into());
-
-    let json = serde_json::to_string_pretty(&settings)
+    write_peacock_to_json(&mut folder_settings, &color);
+    let json = serde_json::to_string_pretty(&folder_settings)
         .map_err(|e| format!("Cannot serialize: {}", e))?;
     fs::write(&settings_path, json)
         .map_err(|e| format!("Cannot write settings.json: {}", e))?;
 
+    // ── 2. Also write to .code-workspace file if it has a "settings" key ──
+    if let Ok(content) = fs::read_to_string(ws_file) {
+        if let Ok(mut ws_json) = serde_json::from_str::<serde_json::Value>(&content) {
+            if ws_json.get("settings").is_some() || ws_json.get("folders").is_some() {
+                if ws_json.get("settings").is_none() {
+                    ws_json["settings"] = serde_json::json!({});
+                }
+                let ws_settings = &mut ws_json["settings"];
+                write_peacock_to_json(ws_settings, &color);
+
+                let ws_content = serde_json::to_string_pretty(&ws_json)
+                    .map_err(|e| format!("Cannot serialize workspace: {}", e))?;
+                fs::write(ws_file, ws_content)
+                    .map_err(|e| format!("Cannot write .code-workspace: {}", e))?;
+            }
+        }
+    }
+
     Ok(())
+}
+
+fn write_peacock_to_json(settings: &mut serde_json::Value, color: &str) {
+    settings["peacock.color"] = serde_json::Value::String(color.to_string());
+
+    if settings.get("workbench.colorCustomizations").is_none() {
+        settings["workbench.colorCustomizations"] = serde_json::json!({});
+    }
+    let wb = &mut settings["workbench.colorCustomizations"];
+    wb["titleBar.activeBackground"] = serde_json::Value::String(color.to_string());
+    wb["titleBar.activeForeground"] = serde_json::Value::String("#ffffff".into());
+    wb["activityBar.background"] = serde_json::Value::String(color.to_string());
+    wb["activityBar.foreground"] = serde_json::Value::String("#ffffff".into());
+    wb["statusBar.background"] = serde_json::Value::String(color.to_string());
+    wb["statusBar.foreground"] = serde_json::Value::String("#ffffff".into());
 }
 
 #[tauri::command]
