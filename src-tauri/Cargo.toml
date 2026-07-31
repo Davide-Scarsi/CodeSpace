@@ -5,9 +5,6 @@ description = "CodeSpace - VS Code Workspace Manager"
 authors = ["Davide Scarsi"]
 edition = "2021"
 
-[build]
-target-dir = "target"
-
 [lib]
 name = "codespace_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
