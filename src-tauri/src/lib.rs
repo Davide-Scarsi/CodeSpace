@@ -251,34 +251,78 @@ fn load_cache(app: &tauri::AppHandle) -> Option<Cache> {
 
 // ── Peacock Color ─────────────────────────────────────────────
 
-/// Reads the Peacock color from a workspace's .vscode/settings.json.
-/// Looks for `peacock.color` first, then falls back to
-/// `workbench.colorCustomizations.titleBar.activeBackground`.
+/// Reads the Peacock color from a workspace. Tries in order:
+/// 1. .code-workspace file's "settings.peacock.color"
+/// 2. .code-workspace file's "settings.workbench.colorCustomizations"
+/// 3. .vscode/settings.json (from workspace file parent or resolved folder)
 fn read_peacock_color(workspace_path: &str) -> Option<String> {
     let ws_file = Path::new(workspace_path);
-    let project_dir = ws_file.parent()?;
-    let settings_path = project_dir.join(".vscode").join("settings.json");
 
-    let content = fs::read_to_string(&settings_path).ok()?;
-    let settings: serde_json::Value = serde_json::from_str(&content).ok()?;
+    // --- Step 1 & 2: Read the .code-workspace file itself ---
+    if let Ok(content) = fs::read_to_string(ws_file) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+            // Try peacock.color in workspace settings
+            if let Some(settings) = json.get("settings") {
+                if let Some(color) = settings.get("peacock.color").and_then(|v| v.as_str()) {
+                    let _ = log_debug(ws_file, &format!("found in .code-workspace settings.peacock.color: {}", color));
+                    return Some(color.to_string());
+                }
+                if let Some(wb) = settings.get("workbench.colorCustomizations") {
+                    if let Some(color) = extract_color_from_customizations(wb) {
+                        let _ = log_debug(ws_file, &format!("found in .code-workspace settings.workbench: {}", color));
+                        return Some(color);
+                    }
+                }
+            }
 
-    // Try peacock.color first
-    if let Some(color) = settings
-        .get("peacock.color")
-        .and_then(|v| v.as_str())
-    {
-        return Some(color.to_string());
+            // Resolve project folder from "folders" array
+            let project_dir = if let Some(folders) = json.get("folders").and_then(|v| v.as_array()) {
+                if let Some(first) = folders.first() {
+                    if let Some(folder_path) = first.get("path").and_then(|v| v.as_str()) {
+                        let base = ws_file.parent().unwrap_or(Path::new("."));
+                        let resolved = base.join(folder_path);
+                        let _ = log_debug(ws_file, &format!("resolved folder from .code-workspace: {:?}", resolved));
+                        resolved
+                    } else {
+                        ws_file.parent()?.to_path_buf()
+                    }
+                } else {
+                    ws_file.parent()?.to_path_buf()
+                }
+            } else {
+                ws_file.parent()?.to_path_buf()
+            };
+
+            // --- Step 3: .vscode/settings.json ---
+            let settings_path = project_dir.join(".vscode").join("settings.json");
+            let _ = log_debug(ws_file, &format!("checking settings.json: {:?}", settings_path));
+            if let Ok(content) = fs::read_to_string(&settings_path) {
+                if let Ok(settings) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(color) = settings.get("peacock.color").and_then(|v| v.as_str()) {
+                        let _ = log_debug(ws_file, &format!("found in settings.json peacock.color: {}", color));
+                        return Some(color.to_string());
+                    }
+                    if let Some(wb) = settings.get("workbench.colorCustomizations") {
+                        if let Some(color) = extract_color_from_customizations(wb) {
+                            let _ = log_debug(ws_file, &format!("found in settings.json workbench: {}", color));
+                            return Some(color);
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    // Fallback to workbench.colorCustomizations
-    let customizations = settings.get("workbench.colorCustomizations")?;
-    if let Some(color) = customizations.get("titleBar.activeBackground").and_then(|v| v.as_str()) {
-        return Some(color.to_string());
+    let _ = log_debug(ws_file, "no color found");
+    None
+}
+
+fn extract_color_from_customizations(customizations: &serde_json::Value) -> Option<String> {
+    for key in &["titleBar.activeBackground", "activityBar.background", "statusBar.background"] {
+        if let Some(color) = customizations.get(*key).and_then(|v| v.as_str()) {
+            return Some(color.to_string());
+        }
     }
-    if let Some(color) = customizations.get("activityBar.background").and_then(|v| v.as_str()) {
-        return Some(color.to_string());
-    }
-    // Pick any first color value from the object
     if let Some(obj) = customizations.as_object() {
         for (_key, val) in obj {
             if let Some(c) = val.as_str() {
@@ -288,8 +332,17 @@ fn read_peacock_color(workspace_path: &str) -> Option<String> {
             }
         }
     }
-
     None
+}
+
+fn log_debug(ws_file: &Path, msg: &str) -> std::io::Result<()> {
+    let log_path = std::env::temp_dir().join("codespace_debug.log");
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)?;
+    use std::io::Write;
+    writeln!(file, "[{}] {:?}: {}", chrono::Local::now().format("%H:%M:%S"), ws_file, msg)
 }
 
 fn populate_colors(workspaces: &mut [WorkspaceInfo]) {
