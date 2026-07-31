@@ -127,25 +127,29 @@ onUnmounted(() => {
         :disabled="scanning"
         @click="scan(false)"
       >
-        {{ scanning ? "⏳ Scanning..." : "🔄 Quick Scan" }}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.8-8.7"/><path d="M21 3v6h-6"/></svg>
+        {{ scanning ? "Scanning..." : "Quick Scan" }}
       </button>
       <button
         class="btn btn-secondary"
         :disabled="scanning"
         @click="scan(true)"
       >
-        🔍 Full Scan
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        Full Scan
       </button>
 
       <div class="search-box">
-        <span class="search-icon">🔎</span>
+        <svg class="search-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <input
           v-model="searchQuery"
           type="text"
           placeholder="Filter workspaces..."
           class="search-input"
         />
-        <span v-if="searchQuery" class="search-clear" @click="searchQuery = ''">✕</span>
+        <span v-if="searchQuery" class="search-clear" @click="searchQuery = ''">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </span>
       </div>
 
       <div class="toolbar-spacer"></div>
@@ -281,6 +285,9 @@ body {
 }
 
 .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 14px;
   border: 1px solid #30363d;
   border-radius: 6px;
@@ -288,6 +295,9 @@ body {
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
   white-space: nowrap;
+  font-family: inherit;
+  color: #c9d1d9;
+  background: #21262d;
 }
 
 .btn:disabled {
@@ -296,13 +306,13 @@ body {
 }
 
 .btn-primary {
-  background: #238636;
+  background: #1f6feb;
   color: #fff;
-  border-color: #2ea043;
+  border-color: #388bfd;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #2ea043;
+  background: #388bfd;
 }
 
 .btn-secondary {
@@ -327,9 +337,9 @@ body {
   max-width: 320px;
 }
 
-.search-icon {
-  font-size: 14px;
+.search-icon-svg {
   flex-shrink: 0;
+  color: #8b949e;
 }
 
 .search-input {
@@ -348,7 +358,8 @@ body {
 .search-clear {
   cursor: pointer;
   color: #8b949e;
-  font-size: 14px;
+  display: flex;
+  align-items: center;
   padding: 0 2px;
 }
 
@@ -378,22 +389,23 @@ body {
   flex: 1;
   overflow: auto;
   padding: 4px 8px;
-  scrollbar-width: thin;
-  scrollbar-color: #30363d transparent;
+  scrollbar-width: auto;
+  scrollbar-color: #484f58 #161b22;
 }
 
 .list-container::-webkit-scrollbar {
-  width: 6px;
+  width: 10px;
 }
 .list-container::-webkit-scrollbar-track {
-  background: transparent;
+  background: #161b22;
 }
 .list-container::-webkit-scrollbar-thumb {
-  background: #30363d;
-  border-radius: 3px;
+  background: #484f58;
+  border-radius: 5px;
+  border: 2px solid #161b22;
 }
 .list-container::-webkit-scrollbar-thumb:hover {
-  background: #484f58;
+  background: #6e7681;
 }
 
 .empty-state {
