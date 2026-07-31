@@ -5,7 +5,9 @@
       "path": "."
     }
   ],
-  "settings": {},
+  "settings": {
+    "sarif-viewer.connectToGithubCodeScanning": "off"
+  },
   "extensions": {
     "recommendations": [
       "Vue.volar",
