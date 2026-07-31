@@ -378,6 +378,22 @@ body {
   flex: 1;
   overflow: auto;
   padding: 4px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: #30363d transparent;
+}
+
+.list-container::-webkit-scrollbar {
+  width: 6px;
+}
+.list-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+.list-container::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 3px;
+}
+.list-container::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
 }
 
 .empty-state {
