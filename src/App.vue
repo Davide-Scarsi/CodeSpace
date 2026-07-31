@@ -1,36 +1,31 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import WorkspaceTree from "./components/WorkspaceTree.vue";
-import type { TreeNode } from "./components/WorkspaceTree.vue";
+
+// ── Types ─────────────────────────────────────────────────
+interface WorkspaceInfo {
+  path: string;
+  name: string;
+  display_path: string;
+}
 
 // ── State ────────────────────────────────────────────────
-const treeNodes = ref<TreeNode[]>([]);
+const workspaces = ref<WorkspaceInfo[]>([]);
 const scanInfo = ref({ has_cache: false, count: 0, last_scan: 0 });
 const scanning = ref(false);
 const searchQuery = ref("");
 const statusMessage = ref("");
 
 // ── Computed ─────────────────────────────────────────────
-const filteredNodes = computed(() => {
-  if (!searchQuery.value.trim()) return treeNodes.value;
-  return filterTree(treeNodes.value, searchQuery.value.toLowerCase());
+const filteredWorkspaces = computed(() => {
+  if (!searchQuery.value.trim()) return workspaces.value;
+  const q = searchQuery.value.toLowerCase();
+  return workspaces.value.filter(
+    (ws) =>
+      ws.name.toLowerCase().includes(q) ||
+      ws.display_path.toLowerCase().includes(q)
+  );
 });
-
-function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
-  const result: TreeNode[] = [];
-  for (const node of nodes) {
-    const nameMatch = node.name.toLowerCase().includes(query);
-    const filteredChildren = filterTree(node.children, query);
-    if (nameMatch || filteredChildren.length > 0) {
-      result.push({
-        ...node,
-        children: filteredChildren.length > 0 ? filteredChildren : node.children,
-      });
-    }
-  }
-  return result;
-}
 
 const lastScanDate = computed(() => {
   if (!scanInfo.value.last_scan) return "";
@@ -48,7 +43,7 @@ async function scan(forceFull: boolean) {
     ? "Full scan in progress (scanning all drives)..."
     : "Scanning...";
   try {
-    treeNodes.value = await invoke("scan_workspaces", { forceFull });
+    workspaces.value = await invoke("scan_workspaces", { forceFull });
     await loadScanInfo();
     statusMessage.value = `Found ${scanInfo.value.count} workspace(s)`;
   } catch (e) {
@@ -122,18 +117,28 @@ onMounted(async () => {
     <!-- Status bar -->
     <div v-if="statusMessage" class="status-bar">{{ statusMessage }}</div>
 
-    <!-- Tree -->
-    <div class="tree-container">
-      <div v-if="treeNodes.length === 0 && !scanning" class="empty-state">
+    <!-- Workspace List -->
+    <div class="list-container">
+      <div v-if="workspaces.length === 0 && !scanning" class="empty-state">
         <p>No workspaces found.</p>
         <p class="hint">Click "Quick Scan" or "Full Scan" to start.</p>
       </div>
-      <WorkspaceTree
-        v-else
-        :nodes="filteredNodes"
-        :depth="0"
-        @launch="launchWorkspace"
-      />
+
+      <div
+        v-for="ws in filteredWorkspaces"
+        :key="ws.path"
+        class="ws-card"
+        @click="launchWorkspace(ws.path)"
+      >
+        <div class="ws-icon">📁</div>
+        <div class="ws-info">
+          <span class="ws-name">{{ ws.name }}</span>
+          <span class="ws-path">{{ ws.display_path }}</span>
+        </div>
+        <div class="ws-actions">
+          <span class="ws-badge">WS</span>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -298,11 +303,11 @@ body {
   flex-shrink: 0;
 }
 
-/* ── Tree container ───────────────────────────────────── */
-.tree-container {
+/* ── List container ───────────────────────────────────── */
+.list-container {
   flex: 1;
   overflow: auto;
-  padding: 8px 0;
+  padding: 4px 8px;
 }
 
 .empty-state {
@@ -318,5 +323,70 @@ body {
 .empty-state .hint {
   font-size: 13px;
   color: #484f58;
+}
+
+/* ── Workspace card ───────────────────────────────────── */
+.ws-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: 2px 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s;
+  border: 1px solid transparent;
+}
+
+.ws-card:hover {
+  background: #1c2128;
+  border-color: #30363d;
+}
+
+.ws-card:active {
+  background: #1a2332;
+}
+
+.ws-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  width: 28px;
+  text-align: center;
+}
+
+.ws-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.ws-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.ws-path {
+  font-size: 11px;
+  color: #8b949e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+
+.ws-actions {
+  flex-shrink: 0;
+}
+
+.ws-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #0d1117;
+  background: #58a6ff;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
 }
 </style>

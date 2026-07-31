@@ -29,15 +29,6 @@ pub struct Cache {
     pub last_scan: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct TreeNode {
-    pub name: String,
-    pub full_path: String,
-    pub is_workspace: bool,
-    pub workspace_path: Option<String>,
-    pub children: Vec<TreeNode>,
-}
-
 // ── Helpers ────────────────────────────────────────────────────
 
 fn get_cache_path(app: &tauri::AppHandle) -> PathBuf {
@@ -254,85 +245,11 @@ fn load_cache(app: &tauri::AppHandle) -> Option<Cache> {
     None
 }
 
-fn build_tree(workspaces: &[WorkspaceInfo]) -> Vec<TreeNode> {
-    let mut root: HashMap<String, TreeNode> = HashMap::new();
-
-    for ws in workspaces {
-        let display = &ws.display_path;
-        let path = Path::new(display);
-
-        let components: Vec<String> = path
-            .components()
-            .map(|c| c.as_os_str().to_string_lossy().to_string())
-            .filter(|c| !c.is_empty())
-            .collect();
-
-        if components.is_empty() {
-            continue;
-        }
-
-        let root_key = components[0].clone();
-        let root_node = root.entry(root_key.clone()).or_insert_with(|| TreeNode {
-            name: root_key.clone(),
-            full_path: root_key.clone(),
-            is_workspace: false,
-            workspace_path: None,
-            children: Vec::new(),
-        });
-
-        let mut current_children = &mut root_node.children;
-        let mut current_path = root_key;
-
-        for (i, comp) in components.iter().enumerate().skip(1) {
-            current_path = format!("{}\\{}", current_path, comp);
-            let is_last = i == components.len() - 1;
-
-            let idx = current_children.iter().position(|n| n.name == *comp);
-
-            if let Some(pos) = idx {
-                current_children = &mut current_children[pos].children;
-            } else {
-                let new_node = TreeNode {
-                    name: comp.clone(),
-                    full_path: current_path.clone(),
-                    is_workspace: is_last,
-                    workspace_path: if is_last {
-                        Some(ws.path.clone())
-                    } else {
-                        None
-                    },
-                    children: Vec::new(),
-                };
-                current_children.push(new_node);
-                let last = current_children.len() - 1;
-                current_children = &mut current_children[last].children;
-            }
-        }
-    }
-
-    let mut result: Vec<TreeNode> = root.into_values().collect();
-    sort_tree(&mut result);
-    result
-}
-
-fn sort_tree(nodes: &mut [TreeNode]) {
-    nodes.sort_by(|a, b| {
-        if a.is_workspace != b.is_workspace {
-            a.is_workspace.cmp(&b.is_workspace)
-        } else {
-            a.name.to_lowercase().cmp(&b.name.to_lowercase())
-        }
-    });
-    for node in nodes.iter_mut() {
-        sort_tree(&mut node.children);
-    }
-}
-
 // ── Tauri Commands ─────────────────────────────────────────────
 
 #[tauri::command]
-fn scan_workspaces(app: tauri::AppHandle, force_full: bool) -> Vec<TreeNode> {
-    let workspaces = if force_full {
+fn scan_workspaces(app: tauri::AppHandle, force_full: bool) -> Vec<WorkspaceInfo> {
+    let mut workspaces = if force_full {
         full_scan()
     } else if let Some(cache) = load_cache(&app) {
         quick_scan(&cache)
@@ -340,47 +257,23 @@ fn scan_workspaces(app: tauri::AppHandle, force_full: bool) -> Vec<TreeNode> {
         full_scan()
     };
 
+    // Sort alphabetically by name
+    workspaces.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+
     save_cache(&app, &workspaces);
-    build_tree(&workspaces)
+    workspaces
 }
 
 #[tauri::command]
 fn launch_workspace(path: String) -> Result<(), String> {
-    let result = Command::new("code").arg(&path).spawn();
+    // Use Windows shell "start" to open .code-workspace with associated program
+    let result = Command::new("cmd")
+        .args(["/c", "start", "", &path])
+        .spawn();
 
     match result {
         Ok(_) => Ok(()),
-        Err(e) => {
-            let fallbacks = vec![
-                format!(
-                    "{}\\Microsoft VS Code\\Code.exe",
-                    std::env::var("LOCALAPPDATA").unwrap_or_default()
-                ),
-                format!(
-                    "{}\\Microsoft VS Code\\Code.exe",
-                    std::env::var("ProgramFiles").unwrap_or_default()
-                ),
-                format!(
-                    "{}\\Microsoft VS Code\\Code.exe",
-                    std::env::var("ProgramFiles(x86)").unwrap_or_default()
-                ),
-            ];
-
-            for fb in &fallbacks {
-                if Path::new(fb).exists() {
-                    return Command::new(fb)
-                        .arg(&path)
-                        .spawn()
-                        .map(|_| ())
-                        .map_err(|e2| format!("Failed to launch: {}", e2));
-                }
-            }
-
-            Err(format!(
-                "VS Code not found. Make sure 'code' is in PATH. Error: {}",
-                e
-            ))
-        }
+        Err(e) => Err(format!("Failed to launch: {}", e)),
     }
 }
 
