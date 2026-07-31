@@ -183,7 +183,7 @@ onUnmounted(() => {
           <VscodeIcon :color="ws.color" :size="28" />
         </div>
         <div class="ws-info">
-          <span class="ws-name">{{ ws.name }}</span>
+          <span class="ws-name">{{ ws.name }} <span class="ws-color-debug">{{ ws.color ?? 'null' }}</span></span>
           <span class="ws-path">{{ ws.display_path }}</span>
         </div>
       </div>
@@ -435,6 +435,13 @@ body {
   font-size: 13px;
   font-weight: 600;
   color: #e6edf3;
+}
+
+.ws-color-debug {
+  font-weight: 400;
+  font-size: 11px;
+  color: #f78166;
+  margin-left: 8px;
 }
 
 .ws-path {
