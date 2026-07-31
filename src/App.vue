@@ -20,7 +20,6 @@ const statusMessage = ref("");
 
 // Context menu
 const contextMenu = ref<{ x: number; y: number; ws: WorkspaceInfo } | null>(null);
-const colorPickerInput = ref<HTMLInputElement | null>(null);
 
 // ── Computed ─────────────────────────────────────────────
 const filteredWorkspaces = computed(() => {
@@ -69,27 +68,26 @@ async function launchWorkspace(path: string) {
 }
 
 // ── Context Menu ─────────────────────────────────────────
+const PEAKOCK_COLORS = [
+  "#007fff", "#ff007f", "#00bcd4", "#00ff7f", "#9c27b0",
+  "#ff5722", "#ffc107", "#3f51b5", "#8bc34a", "#e91e63",
+  "#009688", "#607d8b", "#1857a4", "#dd0531", "#832561",
+];
+
 function onContextMenu(e: MouseEvent, ws: WorkspaceInfo) {
   e.preventDefault();
   contextMenu.value = { x: e.clientX, y: e.clientY, ws };
-  // Let the DOM render, then focus the color input
-  requestAnimationFrame(() => {
-    colorPickerInput.value?.click();
-  });
 }
 
 function closeContextMenu() {
   contextMenu.value = null;
 }
 
-function onContextMenuClick(e: MouseEvent) {
-  // Close if clicking outside the menu
-  if ((e.target as HTMLElement).closest(".context-menu") === null) {
-    closeContextMenu();
-  }
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape") closeContextMenu();
 }
 
-async function onChangeColor(ws: WorkspaceInfo, color: string) {
+async function pickColor(ws: WorkspaceInfo, color: string) {
   try {
     await invoke("set_workspace_color", { workspacePath: ws.path, color });
     ws.color = color;
@@ -100,14 +98,9 @@ async function onChangeColor(ws: WorkspaceInfo, color: string) {
   closeContextMenu();
 }
 
-function onColorInput(e: Event, ws: WorkspaceInfo) {
-  const color = (e.target as HTMLInputElement).value;
-  onChangeColor(ws, color);
-}
-
 // ── Lifecycle ────────────────────────────────────────────
 onMounted(async () => {
-  document.addEventListener("click", onContextMenuClick);
+  document.addEventListener("keydown", onKeydown);
   await loadScanInfo();
   if (scanInfo.value.has_cache) {
     await scan(false);
@@ -115,7 +108,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  document.removeEventListener("click", onContextMenuClick);
+  document.removeEventListener("keydown", onKeydown);
 });
 </script>
 
@@ -183,7 +176,7 @@ onUnmounted(() => {
           <VscodeIcon :color="ws.color" :size="28" />
         </div>
         <div class="ws-info">
-          <span class="ws-name">{{ ws.name }} <span class="ws-color-debug">{{ ws.color ?? 'null' }}</span></span>
+          <span class="ws-name">{{ ws.name }}</span>
           <span class="ws-path">{{ ws.display_path }}</span>
         </div>
       </div>
@@ -193,18 +186,27 @@ onUnmounted(() => {
     <Teleport to="body">
       <div
         v-if="contextMenu"
-        class="context-menu"
-        :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
-        @click.stop
+        class="context-menu-overlay"
+        @click="closeContextMenu"
+        @contextmenu.prevent="closeContextMenu"
       >
-        <div class="context-menu-item">
-          <span>🎨 Peacock color</span>
-          <input
-            ref="colorPickerInput"
-            type="color"
-            :value="contextMenu.ws.color ?? '#32B5F1'"
-            @input="onColorInput($event, contextMenu.ws)"
-          />
+        <div
+          class="context-menu"
+          :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+          @click.stop
+        >
+          <div class="context-menu-title">🎨 Peacock color</div>
+          <div class="color-grid">
+            <button
+              v-for="c in PEAKOCK_COLORS"
+              :key="c"
+              class="color-swatch"
+              :style="{ background: c }"
+              :class="{ active: contextMenu.ws.color === c }"
+              :title="c"
+              @click="pickColor(contextMenu.ws, c)"
+            ></button>
+          </div>
         </div>
       </div>
     </Teleport>
@@ -437,13 +439,6 @@ body {
   color: #e6edf3;
 }
 
-.ws-color-debug {
-  font-weight: 400;
-  font-size: 11px;
-  color: #f78166;
-  margin-left: 8px;
-}
-
 .ws-path {
   font-size: 11px;
   color: #8b949e;
@@ -454,49 +449,51 @@ body {
 }
 
 /* ── Context menu ─────────────────────────────────────── */
+.context-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+}
+
 .context-menu {
   position: fixed;
   z-index: 9999;
   background: #1c2128;
   border: 1px solid #30363d;
   border-radius: 8px;
-  padding: 4px;
-  min-width: 220px;
+  padding: 8px 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
-.context-menu-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  font-size: 13px;
-  color: #c9d1d9;
-  border-radius: 4px;
-  cursor: default;
+.context-menu-title {
+  font-size: 12px;
+  color: #8b949e;
+  margin-bottom: 6px;
+  padding: 0 2px;
 }
 
-.context-menu-item:hover {
-  background: #30363d;
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
 }
 
-.context-menu-item input[type="color"] {
+.color-swatch {
   width: 28px;
   height: 28px;
-  border: 1px solid #30363d;
   border-radius: 4px;
+  border: 2px solid transparent;
   cursor: pointer;
-  padding: 1px;
-  background: transparent;
+  transition: border-color 0.1s, transform 0.1s;
 }
 
-.context-menu-item input[type="color"]::-webkit-color-swatch-wrapper {
-  padding: 0;
+.color-swatch:hover {
+  border-color: #8b949e;
+  transform: scale(1.15);
 }
 
-.context-menu-item input[type="color"]::-webkit-color-swatch {
-  border: none;
-  border-radius: 3px;
+.color-swatch.active {
+  border-color: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.3);
 }
 </style>
