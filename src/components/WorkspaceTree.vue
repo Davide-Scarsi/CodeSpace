@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
 
 export interface TreeNode {
   name: string;
@@ -10,7 +9,7 @@ export interface TreeNode {
   children: TreeNode[];
 }
 
-const props = defineProps<{
+defineProps<{
   nodes: TreeNode[];
   depth: number;
 }>();

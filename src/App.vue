@@ -1,160 +1,322 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import WorkspaceTree from "./components/WorkspaceTree.vue";
+import type { TreeNode } from "./components/WorkspaceTree.vue";
 
-const greetMsg = ref("");
-const name = ref("");
+// ── State ────────────────────────────────────────────────
+const treeNodes = ref<TreeNode[]>([]);
+const scanInfo = ref({ has_cache: false, count: 0, last_scan: 0 });
+const scanning = ref(false);
+const searchQuery = ref("");
+const statusMessage = ref("");
 
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-  greetMsg.value = await invoke("greet", { name: name.value });
+// ── Computed ─────────────────────────────────────────────
+const filteredNodes = computed(() => {
+  if (!searchQuery.value.trim()) return treeNodes.value;
+  return filterTree(treeNodes.value, searchQuery.value.toLowerCase());
+});
+
+function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
+  const result: TreeNode[] = [];
+  for (const node of nodes) {
+    const nameMatch = node.name.toLowerCase().includes(query);
+    const filteredChildren = filterTree(node.children, query);
+    if (nameMatch || filteredChildren.length > 0) {
+      result.push({
+        ...node,
+        children: filteredChildren.length > 0 ? filteredChildren : node.children,
+      });
+    }
+  }
+  return result;
 }
+
+const lastScanDate = computed(() => {
+  if (!scanInfo.value.last_scan) return "";
+  return new Date(scanInfo.value.last_scan * 1000).toLocaleString();
+});
+
+// ── Actions ──────────────────────────────────────────────
+async function loadScanInfo() {
+  scanInfo.value = await invoke("get_scan_info");
+}
+
+async function scan(forceFull: boolean) {
+  scanning.value = true;
+  statusMessage.value = forceFull
+    ? "Full scan in progress (scanning all drives)..."
+    : "Scanning...";
+  try {
+    treeNodes.value = await invoke("scan_workspaces", { forceFull });
+    await loadScanInfo();
+    statusMessage.value = `Found ${scanInfo.value.count} workspace(s)`;
+  } catch (e) {
+    statusMessage.value = `Error: ${e}`;
+  } finally {
+    scanning.value = false;
+  }
+}
+
+async function launchWorkspace(path: string) {
+  try {
+    await invoke("launch_workspace", { path });
+    statusMessage.value = `Launched: ${path}`;
+  } catch (e) {
+    statusMessage.value = `Launch error: ${e}`;
+  }
+}
+
+// ── Lifecycle ────────────────────────────────────────────
+onMounted(async () => {
+  await loadScanInfo();
+  if (scanInfo.value.has_cache) {
+    await scan(false);
+  }
+});
 </script>
 
 <template>
-  <main class="container">
-    <h1>Welcome to Tauri + Vue</h1>
+  <div class="app-shell">
+    <!-- Header -->
+    <header class="app-header">
+      <h1 class="app-title">CodeSpace</h1>
+      <span class="app-subtitle">VS Code Workspace Manager</span>
+    </header>
 
-    <div class="row">
-      <a href="https://vite.dev" target="_blank">
-        <img src="/vite.svg" class="logo vite" alt="Vite logo" />
-      </a>
-      <a href="https://tauri.app" target="_blank">
-        <img src="/tauri.svg" class="logo tauri" alt="Tauri logo" />
-      </a>
-      <a href="https://vuejs.org/" target="_blank">
-        <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-      </a>
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <button
+        class="btn btn-primary"
+        :disabled="scanning"
+        @click="scan(false)"
+      >
+        {{ scanning ? "⏳ Scanning..." : "🔄 Quick Scan" }}
+      </button>
+      <button
+        class="btn btn-secondary"
+        :disabled="scanning"
+        @click="scan(true)"
+      >
+        🔍 Full Scan
+      </button>
+
+      <div class="search-box">
+        <span class="search-icon">🔎</span>
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Filter workspaces..."
+          class="search-input"
+        />
+        <span v-if="searchQuery" class="search-clear" @click="searchQuery = ''">✕</span>
+      </div>
+
+      <div class="toolbar-spacer"></div>
+
+      <span v-if="scanInfo.has_cache" class="cache-badge">
+        {{ scanInfo.count }} ws · {{ lastScanDate }}
+      </span>
     </div>
-    <p>Click on the Tauri, Vite, and Vue logos to learn more.</p>
 
-    <form class="row" @submit.prevent="greet">
-      <input id="greet-input" v-model="name" placeholder="Enter a name..." />
-      <button type="submit">Greet</button>
-    </form>
-    <p>{{ greetMsg }}</p>
-  </main>
+    <!-- Status bar -->
+    <div v-if="statusMessage" class="status-bar">{{ statusMessage }}</div>
+
+    <!-- Tree -->
+    <div class="tree-container">
+      <div v-if="treeNodes.length === 0 && !scanning" class="empty-state">
+        <p>No workspaces found.</p>
+        <p class="hint">Click "Quick Scan" or "Full Scan" to start.</p>
+      </div>
+      <WorkspaceTree
+        v-else
+        :nodes="filteredNodes"
+        :depth="0"
+        @launch="launchWorkspace"
+      />
+    </div>
+  </div>
 </template>
 
-<style scoped>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #249b73);
-}
-
-</style>
 <style>
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
+/* ── Reset & Base ──────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-.container {
-  margin: 0;
-  padding-top: 10vh;
+:root {
+  font-family: "Segoe UI", Inter, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: #c9d1d9;
+  background: #0d1117;
+}
+
+body {
+  overflow: hidden;
+}
+</style>
+
+<style scoped>
+.app-shell {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  text-align: center;
+  height: 100vh;
+  background: #0d1117;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
+/* ── Header ───────────────────────────────────────────── */
+.app-header {
   display: flex;
-  justify-content: center;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #21262d;
+  background: #161b22;
+  flex-shrink: 0;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+.app-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #58a6ff;
 }
 
-a:hover {
-  color: #535bf2;
+.app-subtitle {
+  font-size: 12px;
+  color: #8b949e;
 }
 
-h1 {
-  text-align: center;
+/* ── Toolbar ──────────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #21262d;
+  background: #161b22;
+  flex-shrink: 0;
 }
 
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
+.toolbar-spacer {
+  flex: 1;
 }
 
-button {
+.btn {
+  padding: 6px 14px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  font-size: 13px;
   cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
 }
 
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-input,
-button {
+.btn-primary {
+  background: #238636;
+  color: #fff;
+  border-color: #2ea043;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #2ea043;
+}
+
+.btn-secondary {
+  background: #21262d;
+  color: #c9d1d9;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #30363d;
+}
+
+/* ── Search ───────────────────────────────────────────── */
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 4px 10px;
+  flex: 1;
+  max-width: 320px;
+}
+
+.search-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #c9d1d9;
+  font-size: 13px;
   outline: none;
 }
 
-#greet-input {
-  margin-right: 5px;
+.search-input::placeholder {
+  color: #484f58;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
-
-  a:hover {
-    color: #24c8db;
-  }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
+.search-clear {
+  cursor: pointer;
+  color: #8b949e;
+  font-size: 14px;
+  padding: 0 2px;
 }
 
+.search-clear:hover {
+  color: #c9d1d9;
+}
+
+/* ── Cache badge ──────────────────────────────────────── */
+.cache-badge {
+  font-size: 11px;
+  color: #8b949e;
+  white-space: nowrap;
+}
+
+/* ── Status bar ───────────────────────────────────────── */
+.status-bar {
+  padding: 6px 16px;
+  font-size: 12px;
+  color: #8b949e;
+  background: #161b22;
+  border-bottom: 1px solid #21262d;
+  flex-shrink: 0;
+}
+
+/* ── Tree container ───────────────────────────────────── */
+.tree-container {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 0;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #8b949e;
+  gap: 8px;
+}
+
+.empty-state .hint {
+  font-size: 13px;
+  color: #484f58;
+}
 </style>
