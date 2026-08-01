@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import VscodeIcon from "./components/VscodeIcon.vue";
+import UpdateBanner from "./components/UpdateBanner.vue";
 
 // ── Types ─────────────────────────────────────────────────
 interface WorkspaceInfo {
@@ -146,6 +147,8 @@ onUnmounted(() => {
       <h1 class="app-title">CodeSpace</h1>
       <span class="app-subtitle">VS Code Workspace Manager</span>
     </header>
+
+    <UpdateBanner />
 
     <!-- Toolbar -->
     <div class="toolbar">

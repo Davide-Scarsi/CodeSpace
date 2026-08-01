@@ -24,6 +24,8 @@ dist-ssr
 src-tauri/target/
 rust-target/
 .cargo/
+src-tauri/keys.txt
+latest.json
 
 # Agents (local work files, not for commit)
 agents/

@@ -499,6 +499,7 @@ fn get_scan_info(app: tauri::AppHandle) -> serde_json::Value {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             scan_workspaces,
             launch_workspace,
