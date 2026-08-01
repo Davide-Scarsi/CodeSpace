@@ -194,10 +194,6 @@ onUnmounted(() => {
       class="list-container"
       :class="{ 'drag-over': dragOver }"
     >
-      <div v-if="dragOver" class="drop-zone">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span>Drop folder here</span>
-      </div>
       <div v-if="workspaces.length === 0 && !scanning" class="empty-state">
         <p>No workspaces found.</p>
         <p class="hint">Click "Quick Scan" or "Full Scan" to start.</p>
@@ -225,6 +221,14 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- Drop Zone Overlay -->
+    <Teleport to="body">
+      <div v-if="dragOver" class="drop-zone">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Drop folder to add workspace</span>
+      </div>
+    </Teleport>
 
     <!-- Color Modal -->
     <Teleport to="body">
@@ -431,28 +435,6 @@ body {
   padding: 4px 8px;
   scrollbar-width: auto;
   scrollbar-color: #484f58 #161b22;
-  position: relative;
-}
-
-.list-container.drag-over {
-  outline: 2px dashed #1f6feb;
-  outline-offset: -2px;
-}
-
-.drop-zone {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  background: rgba(31, 111, 235, 0.08);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: #58a6ff;
-  font-size: 15px;
-  font-weight: 500;
-  pointer-events: none;
 }
 
 .list-container::-webkit-scrollbar {
@@ -567,6 +549,26 @@ body {
 .ws-btn-launch:hover {
   color: #58a6ff;
   border-color: #1f6feb;
+}
+
+/* ── Drop zone ────────────────────────────────────────── */
+.drop-zone {
+  position: fixed;
+  inset: 0;
+  z-index: 9997;
+  background: rgba(13, 17, 23, 0.85);
+  border: 3px dashed #1f6feb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #58a6ff;
+  font-size: 18px;
+  font-weight: 500;
+  pointer-events: none;
+  margin: 8px;
+  border-radius: 10px;
 }
 
 /* ── Modal ────────────────────────────────────────────── */
