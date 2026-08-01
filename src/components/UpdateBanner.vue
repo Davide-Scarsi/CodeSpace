@@ -7,7 +7,7 @@ const updateAssetId = ref("");
 const downloading = ref(false);
 const error = ref("");
 
-const CURRENT = "1.0.0";
+const CURRENT = "1.0.1";
 
 onMounted(async () => {
   try {
@@ -15,8 +15,8 @@ onMounted(async () => {
     const latestTag = release.tag_name.replace("v", "");
     if (compare(latestTag, CURRENT) > 0) {
       updateVersion.value = latestTag;
-      const nsis = release.assets.find((a: any) => a.name.endsWith("x64-setup.exe"));
-      if (nsis) updateAssetId.value = nsis.url;
+      const asset = release.assets.find((a: any) => a.name === "CodeSpace.exe");
+      if (asset) updateAssetId.value = asset.url;
     }
   } catch (_) {}
 });
