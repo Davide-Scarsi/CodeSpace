@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import VscodeIcon from "./components/VscodeIcon.vue";
 
@@ -18,10 +18,7 @@ const scanning = ref(false);
 const searchQuery = ref("");
 const statusMessage = ref("");
 
-// Context menu
-const contextMenu = ref<{ x: number; y: number; ws: WorkspaceInfo } | null>(null);
-
-// ── Computed ─────────────────────────────────────────────
+// Color Modal
 const filteredWorkspaces = computed(() => {
   if (!searchQuery.value.trim()) return workspaces.value;
   const q = searchQuery.value.toLowerCase();
@@ -67,27 +64,26 @@ async function launchWorkspace(path: string) {
   }
 }
 
-// ── Context Menu ─────────────────────────────────────────
+// ── Color Modal ─────────────────────────────────────────
+const modalWs = ref<WorkspaceInfo | null>(null);
+
 const PEAKOCK_COLORS = [
   "#007fff", "#ff007f", "#00bcd4", "#00ff7f", "#9c27b0",
   "#ff5722", "#ffc107", "#3f51b5", "#8bc34a", "#e91e63",
   "#009688", "#607d8b", "#1857a4", "#dd0531", "#832561",
 ];
 
-function onContextMenu(e: MouseEvent, ws: WorkspaceInfo) {
-  e.preventDefault();
-  contextMenu.value = { x: e.clientX, y: e.clientY, ws };
+function openColorModal(ws: WorkspaceInfo) {
+  modalWs.value = ws;
 }
 
-function closeContextMenu() {
-  contextMenu.value = null;
+function closeColorModal() {
+  modalWs.value = null;
 }
 
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === "Escape") closeContextMenu();
-}
-
-async function pickColor(ws: WorkspaceInfo, color: string) {
+async function pickColor(color: string) {
+  const ws = modalWs.value;
+  if (!ws) return;
   try {
     await invoke("set_workspace_color", { workspacePath: ws.path, color });
     ws.color = color;
@@ -95,20 +91,15 @@ async function pickColor(ws: WorkspaceInfo, color: string) {
   } catch (e) {
     statusMessage.value = `Error setting color: ${e}`;
   }
-  closeContextMenu();
+  closeColorModal();
 }
 
 // ── Lifecycle ────────────────────────────────────────────
 onMounted(async () => {
-  document.addEventListener("keydown", onKeydown);
   await loadScanInfo();
   if (scanInfo.value.has_cache) {
     await scan(false);
   }
-});
-
-onUnmounted(() => {
-  document.removeEventListener("keydown", onKeydown);
 });
 </script>
 
@@ -173,8 +164,6 @@ onUnmounted(() => {
         v-for="ws in filteredWorkspaces"
         :key="ws.path"
         class="ws-card"
-        @click="launchWorkspace(ws.path)"
-        @contextmenu="onContextMenu($event, ws)"
       >
         <div class="ws-icon">
           <VscodeIcon :color="ws.color" :size="28" />
@@ -183,32 +172,40 @@ onUnmounted(() => {
           <span class="ws-name">{{ ws.name }}</span>
           <span class="ws-path">{{ ws.display_path }}</span>
         </div>
+        <div class="ws-actions">
+          <button class="ws-btn" title="Peacock color" @click.stop="openColorModal(ws)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.8 14.8 0 0 1 4 10 14.8 14.8 0 0 1-4 10"/><path d="M12 2a14.8 14.8 0 0 0-4 10 14.8 14.8 0 0 0 4 10"/><path d="M2 12h20"/></svg>
+          </button>
+          <button class="ws-btn ws-btn-launch" title="Open in VS Code" @click.stop="launchWorkspace(ws.path)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- Context Menu -->
+    <!-- Color Modal -->
     <Teleport to="body">
       <div
-        v-if="contextMenu"
-        class="context-menu-overlay"
-        @click="closeContextMenu"
-        @contextmenu.prevent="closeContextMenu"
+        v-if="modalWs"
+        class="modal-overlay"
+        @click="closeColorModal"
       >
-        <div
-          class="context-menu"
-          :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
-          @click.stop
-        >
-          <div class="context-menu-title">🎨 Peacock color</div>
+        <div class="modal" @click.stop>
+          <div class="modal-header">
+            <span>🎨 {{ modalWs.name }}</span>
+            <button class="modal-close" @click="closeColorModal">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          </div>
           <div class="color-grid">
             <button
               v-for="c in PEAKOCK_COLORS"
               :key="c"
               class="color-swatch"
               :style="{ background: c }"
-              :class="{ active: contextMenu.ws.color === c }"
+              :class="{ active: modalWs.color === c }"
               :title="c"
-              @click="pickColor(contextMenu.ws, c)"
+              @click="pickColor(c)"
             ></button>
           </div>
         </div>
@@ -431,18 +428,12 @@ body {
   padding: 8px 12px;
   margin: 2px 0;
   border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.12s;
   border: 1px solid transparent;
 }
 
 .ws-card:hover {
   background: #1c2128;
   border-color: #30363d;
-}
-
-.ws-card:active {
-  background: #1a2332;
 }
 
 .ws-icon {
@@ -476,40 +467,101 @@ body {
   margin-top: 1px;
 }
 
-/* ── Context menu ─────────────────────────────────────── */
-.context-menu-overlay {
+.ws-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.ws-card:hover .ws-actions {
+  opacity: 1;
+}
+
+.ws-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #8b949e;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.ws-btn:hover {
+  background: #30363d;
+  color: #c9d1d9;
+  border-color: #484f58;
+}
+
+.ws-btn-launch:hover {
+  color: #58a6ff;
+  border-color: #1f6feb;
+}
+
+/* ── Modal ────────────────────────────────────────────── */
+.modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 9998;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.context-menu {
-  position: fixed;
-  z-index: 9999;
+.modal {
   background: #1c2128;
   border: 1px solid #30363d;
-  border-radius: 8px;
-  padding: 8px 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+  min-width: 280px;
 }
 
-.context-menu-title {
-  font-size: 12px;
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
   color: #8b949e;
-  margin-bottom: 6px;
-  padding: 0 2px;
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  background: #30363d;
+  color: #c9d1d9;
 }
 
 .color-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
+  gap: 8px;
 }
 
 .color-swatch {
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
   border: 2px solid transparent;
   cursor: pointer;
   transition: border-color 0.1s, transform 0.1s;
@@ -522,6 +574,6 @@ body {
 
 .color-swatch.active {
   border-color: #fff;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
 }
 </style>
