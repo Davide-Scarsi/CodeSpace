@@ -250,10 +250,12 @@ onUnmounted(() => {
               :key="c"
               class="color-swatch"
               :style="{ background: c }"
-              :class="{ active: modalWs.color === c }"
+              :class="{ active: modalWs.color?.toLowerCase() === c.toLowerCase() }"
               :title="c"
               @click="pickColor(c)"
-            ></button>
+            >
+              <svg v-if="modalWs.color?.toLowerCase() === c.toLowerCase()" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
           </div>
         </div>
       </div>
@@ -632,6 +634,9 @@ body {
   border: 2px solid transparent;
   cursor: pointer;
   transition: border-color 0.1s, transform 0.1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .color-swatch:hover {
@@ -641,6 +646,7 @@ body {
 
 .color-swatch.active {
   border-color: #fff;
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
+  transform: scale(1.05);
 }
 </style>
