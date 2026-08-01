@@ -454,6 +454,46 @@ fn write_peacock_to_json(settings: &mut serde_json::Value, color: &str) {
     wb["statusBar.foreground"] = serde_json::Value::String("#ffffff".into());
 }
 
+fn remove_peacock_from_json(settings: &mut serde_json::Value) {
+    settings.as_object_mut().map(|o| o.remove("peacock.color"));
+    settings.as_object_mut().map(|o| o.remove("workbench.colorCustomizations"));
+}
+
+#[tauri::command]
+fn remove_workspace_color(workspace_path: String) -> Result<(), String> {
+    let ws_file = Path::new(&workspace_path);
+    let project_dir = ws_file.parent().ok_or("Invalid workspace path")?;
+
+    // 1. Remove from .vscode/settings.json
+    let settings_path = project_dir.join(".vscode").join("settings.json");
+    if settings_path.exists() {
+        if let Ok(content) = fs::read_to_string(&settings_path) {
+            if let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content) {
+                remove_peacock_from_json(&mut settings);
+                let json = serde_json::to_string_pretty(&settings)
+                    .map_err(|e| format!("Cannot serialize: {}", e))?;
+                fs::write(&settings_path, json)
+                    .map_err(|e| format!("Cannot write settings.json: {}", e))?;
+            }
+        }
+    }
+
+    // 2. Remove from .code-workspace file
+    if let Ok(content) = fs::read_to_string(ws_file) {
+        if let Ok(mut ws_json) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(settings) = ws_json.get_mut("settings") {
+                remove_peacock_from_json(settings);
+                let ws_content = serde_json::to_string_pretty(&ws_json)
+                    .map_err(|e| format!("Cannot serialize workspace: {}", e))?;
+                fs::write(ws_file, ws_content)
+                    .map_err(|e| format!("Cannot write .code-workspace: {}", e))?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 fn create_workspace(folder_path: String) -> Result<String, String> {
     let folder = Path::new(&folder_path);
@@ -505,6 +545,7 @@ pub fn run() {
             launch_workspace,
             get_workspace_color,
             set_workspace_color,
+            remove_workspace_color,
             create_workspace,
             get_scan_info,
         ])

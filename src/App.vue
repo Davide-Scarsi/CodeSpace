@@ -117,11 +117,18 @@ async function pickColor(color: string) {
   const ws = modalWs.value;
   if (!ws) return;
   try {
-    await invoke("set_workspace_color", { workspacePath: ws.path, color });
-    ws.color = color;
-    statusMessage.value = `Color set to ${color} for ${ws.name}`;
+    // If clicking the already-active color, remove it (reset to default)
+    if (ws.color?.toLowerCase() === color.toLowerCase()) {
+      await invoke("remove_workspace_color", { workspacePath: ws.path });
+      ws.color = null;
+      statusMessage.value = `Color removed for ${ws.name}`;
+    } else {
+      await invoke("set_workspace_color", { workspacePath: ws.path, color });
+      ws.color = color;
+      statusMessage.value = `Color set to ${color} for ${ws.name}`;
+    }
   } catch (e) {
-    statusMessage.value = `Error setting color: ${e}`;
+    statusMessage.value = `Error: ${e}`;
   }
   closeColorModal();
 }
@@ -225,6 +232,11 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <!-- Footer -->
+    <footer class="app-footer">
+      <span>v1.0.1</span>
+    </footer>
+
     <!-- Drop Zone Overlay -->
     <Teleport to="body">
       <div v-if="dragOver" class="drop-zone">
@@ -316,6 +328,18 @@ body {
 .app-subtitle {
   font-size: 12px;
   color: #8b949e;
+}
+
+/* ── Footer ───────────────────────────────────────────── */
+.app-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 12px;
+  border-top: 1px solid #21262d;
+  background: #161b22;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #484f58;
 }
 
 /* ── Toolbar ──────────────────────────────────────────── */
