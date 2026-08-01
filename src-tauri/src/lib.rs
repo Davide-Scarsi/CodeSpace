@@ -495,6 +495,57 @@ fn remove_workspace_color(workspace_path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn check_update() -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    let res = client
+        .get("https://api.github.com/repos/Davide-Scarsi/CodeSpace/releases/latest")
+        .header("Authorization", "Bearer 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")
+        .header("User-Agent", "CodeSpace-Updater")
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    let json: serde_json::Value = res
+        .json()
+        .await
+        .map_err(|e| format!("Parse failed: {}", e))?;
+
+    Ok(json)
+}
+
+#[tauri::command]
+async fn download_and_install(url: String) -> Result<(), String> {
+    let dir = Path::new("C:\\TeamSystem Software\\CodeSpace\\update");
+    fs::create_dir_all(dir).map_err(|e| format!("Cannot create dir: {}", e))?;
+    let setup = dir.join("CodeSpace_Setup.exe");
+
+    // Download
+    let client = reqwest::Client::new();
+    let bytes = client
+        .get(&url)
+        .header("Authorization", "Bearer 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")
+        .header("User-Agent", "CodeSpace-Updater")
+        .header("Accept", "application/octet-stream")
+        .send()
+        .await
+        .map_err(|e| format!("Download failed: {}", e))?
+        .bytes()
+        .await
+        .map_err(|e| format!("Read failed: {}", e))?;
+
+    fs::write(&setup, &bytes).map_err(|e| format!("Save failed: {}", e))?;
+
+    // Run installer
+    Command::new("cmd")
+        .args(["/c", "start", "", setup.to_str().unwrap_or("")])
+        .spawn()
+        .map_err(|e| format!("Launch failed: {}", e))?;
+
+    // Exit app so installer can overwrite
+    std::process::exit(0);
+}
+
+#[tauri::command]
 fn create_workspace(folder_path: String) -> Result<String, String> {
     let folder = Path::new(&folder_path);
     if !folder.is_dir() {
@@ -547,6 +598,8 @@ pub fn run() {
             set_workspace_color,
             remove_workspace_color,
             create_workspace,
+            check_update,
+            download_and_install,
             get_scan_info,
         ])
         .run(tauri::generate_context!())

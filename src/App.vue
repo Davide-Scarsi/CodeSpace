@@ -234,7 +234,7 @@ onUnmounted(() => {
 
     <!-- Footer -->
     <footer class="app-footer">
-      <span>v1.0.1</span>
+      <span>v1.0.0</span>
     </footer>
 
     <!-- Drop Zone Overlay -->
