@@ -366,6 +366,10 @@ fn scan_workspaces(app: tauri::AppHandle, force_full: bool) -> Vec<WorkspaceInfo
     // Sort alphabetically by name
     workspaces.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 
+    // Deduplicate by path (quick_scan may find same workspace from multiple sources)
+    let mut seen = HashMap::new();
+    workspaces.retain(|w| seen.insert(w.path.clone(), true).is_none());
+
     populate_colors(&mut workspaces);
     save_cache(&app, &workspaces);
     workspaces
@@ -451,6 +455,30 @@ fn write_peacock_to_json(settings: &mut serde_json::Value, color: &str) {
 }
 
 #[tauri::command]
+fn create_workspace(folder_path: String) -> Result<String, String> {
+    let folder = Path::new(&folder_path);
+    if !folder.is_dir() {
+        return Err("Not a directory".into());
+    }
+    let name = folder
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "workspace".into());
+
+    let ws_path = folder.join(format!("{}.code-workspace", name));
+    let ws_json = serde_json::json!({
+        "folders": [{ "path": "." }],
+        "settings": {}
+    });
+    let content = serde_json::to_string_pretty(&ws_json)
+        .map_err(|e| format!("Cannot serialize: {}", e))?;
+    fs::write(&ws_path, content)
+        .map_err(|e| format!("Cannot write: {}", e))?;
+
+    Ok(ws_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn get_scan_info(app: tauri::AppHandle) -> serde_json::Value {
     if let Some(cache) = load_cache(&app) {
         serde_json::json!({
@@ -476,6 +504,7 @@ pub fn run() {
             launch_workspace,
             get_workspace_color,
             set_workspace_color,
+            create_workspace,
             get_scan_info,
         ])
         .run(tauri::generate_context!())

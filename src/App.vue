@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import VscodeIcon from "./components/VscodeIcon.vue";
 
 // ── Types ─────────────────────────────────────────────────
@@ -17,6 +18,36 @@ const scanInfo = ref({ has_cache: false, count: 0, last_scan: 0 });
 const scanning = ref(false);
 const searchQuery = ref("");
 const statusMessage = ref("");
+const dragOver = ref(false);
+
+// Tauri native drag-drop
+let unlisten: (() => void) | null = null;
+
+async function setupDragDrop() {
+  unlisten = await getCurrentWindow().onDragDropEvent(async (event) => {
+    if (event.payload.type === "over") {
+      dragOver.value = true;
+    } else if (event.payload.type === "leave") {
+      dragOver.value = false;
+    } else if (event.payload.type === "drop") {
+      dragOver.value = false;
+      const paths = event.payload.paths;
+      let created = 0;
+      for (const folderPath of paths) {
+        try {
+          const wsPath = await invoke("create_workspace", { folderPath });
+          statusMessage.value = `Created: ${wsPath}`;
+          created++;
+        } catch (_) {
+          // Not a folder or error — skip
+        }
+      }
+      if (created > 0) {
+        await scan(false);
+      }
+    }
+  });
+}
 
 // Color Modal
 const filteredWorkspaces = computed(() => {
@@ -96,10 +127,15 @@ async function pickColor(color: string) {
 
 // ── Lifecycle ────────────────────────────────────────────
 onMounted(async () => {
+  setupDragDrop();
   await loadScanInfo();
   if (scanInfo.value.has_cache) {
     await scan(false);
   }
+});
+
+onUnmounted(() => {
+  if (unlisten) unlisten();
 });
 </script>
 
@@ -154,7 +190,14 @@ onMounted(async () => {
     <div v-if="statusMessage" class="status-bar">{{ statusMessage }}</div>
 
     <!-- Workspace List -->
-    <div class="list-container">
+    <div
+      class="list-container"
+      :class="{ 'drag-over': dragOver }"
+    >
+      <div v-if="dragOver" class="drop-zone">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Drop folder here</span>
+      </div>
       <div v-if="workspaces.length === 0 && !scanning" class="empty-state">
         <p>No workspaces found.</p>
         <p class="hint">Click "Quick Scan" or "Full Scan" to start.</p>
@@ -388,6 +431,28 @@ body {
   padding: 4px 8px;
   scrollbar-width: auto;
   scrollbar-color: #484f58 #161b22;
+  position: relative;
+}
+
+.list-container.drag-over {
+  outline: 2px dashed #1f6feb;
+  outline-offset: -2px;
+}
+
+.drop-zone {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: rgba(31, 111, 235, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #58a6ff;
+  font-size: 15px;
+  font-weight: 500;
+  pointer-events: none;
 }
 
 .list-container::-webkit-scrollbar {
