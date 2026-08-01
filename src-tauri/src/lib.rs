@@ -515,11 +515,13 @@ async fn check_update() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 async fn download_and_install(url: String) -> Result<(), String> {
-    let dir = Path::new("C:\\TeamSystem Software\\CodeSpace\\update");
-    fs::create_dir_all(dir).map_err(|e| format!("Cannot create dir: {}", e))?;
-    let setup = dir.join("CodeSpace_Setup.exe");
+    // Get current exe path
+    let current = std::env::current_exe().map_err(|e| format!("{}", e))?;
+    let dir = current.parent().ok_or("No parent dir")?;
+    let new_exe = dir.join("CodeSpace_new.exe");
+    let bat = dir.join("_update.bat");
 
-    // Download
+    // Download the new exe
     let client = reqwest::Client::new();
     let bytes = client
         .get(&url)
@@ -533,15 +535,29 @@ async fn download_and_install(url: String) -> Result<(), String> {
         .await
         .map_err(|e| format!("Read failed: {}", e))?;
 
-    fs::write(&setup, &bytes).map_err(|e| format!("Save failed: {}", e))?;
+    fs::write(&new_exe, &bytes).map_err(|e| format!("Save failed: {}", e))?;
 
-    // Run installer
+    // Write batch script that replaces and restarts
+    let bat_content = format!(
+        "@echo off\r\n\
+         timeout /t 2 /nobreak >nul\r\n\
+         del /f \"{}\"\r\n\
+         move /y \"{}\" \"{}\"\r\n\
+         start \"\" \"{}\"\r\n\
+         del /f \"%~f0\"\r\n",
+        current.display(),
+        new_exe.display(),
+        current.display(),
+        current.display()
+    );
+    fs::write(&bat, bat_content).map_err(|e| format!("Bat failed: {}", e))?;
+
+    // Run the script and exit
     Command::new("cmd")
-        .args(["/c", "start", "", setup.to_str().unwrap_or("")])
+        .args(["/c", bat.to_str().unwrap_or("")])
         .spawn()
         .map_err(|e| format!("Launch failed: {}", e))?;
 
-    // Exit app so installer can overwrite
     std::process::exit(0);
 }
 
