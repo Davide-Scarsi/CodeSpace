@@ -499,7 +499,6 @@ async fn check_update() -> Result<serde_json::Value, String> {
     let client = reqwest::Client::new();
     let res = client
         .get("https://api.github.com/repos/Davide-Scarsi/CodeSpace/releases/latest")
-        .header("Authorization", "Bearer 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")
         .header("User-Agent", "CodeSpace-Updater")
         .send()
         .await
@@ -525,7 +524,6 @@ async fn download_and_install(url: String) -> Result<(), String> {
     let client = reqwest::Client::new();
     let bytes = client
         .get(&url)
-        .header("Authorization", "Bearer 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")
         .header("User-Agent", "CodeSpace-Updater")
         .header("Accept", "application/octet-stream")
         .send()
