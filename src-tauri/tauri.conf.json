@@ -34,12 +34,5 @@
       "icons/icon.ico"
     ],
     "createUpdaterArtifacts": false
-  },
-  "plugins": {
-    "updater": {
-      "endpoints": [
-        "https://github.com/Davide-Scarsi/CodeSpace/releases/latest/download/latest.json"
-      ]
-    }
   }
 }

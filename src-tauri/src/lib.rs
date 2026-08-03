@@ -372,10 +372,17 @@ fn populate_open_status(workspaces: &mut [WorkspaceInfo]) {
 }
 
 fn get_open_workspace_names() -> Vec<String> {
-    let output = Command::new("powershell")
-        .args(["-NoProfile", "-Command",
-            "[System.Diagnostics.Process]::GetProcessesByName('Code') | Where-Object { $_.MainWindowTitle } | ForEach-Object { $_.MainWindowTitle }"])
-        .output();
+    let mut cmd = Command::new("powershell");
+    cmd.args(["-NoProfile", "-Command",
+        "[System.Diagnostics.Process]::GetProcessesByName('Code') | Where-Object { $_.MainWindowTitle } | ForEach-Object { $_.MainWindowTitle }"]);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
+    let output = cmd.output();
     match output {
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout);
@@ -709,7 +716,6 @@ fn get_scan_info(app: tauri::AppHandle) -> serde_json::Value {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             scan_workspaces,
             launch_workspace,
