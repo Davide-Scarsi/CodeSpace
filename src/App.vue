@@ -139,6 +139,10 @@ async function pickColor(color: string) {
 
 // ── Lifecycle ────────────────────────────────────────────
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+const activeWorkspace = computed(() =>
+  workspaces.value.find(w => w.is_open) || null
+);
+
 let polling = false;
 
 onMounted(async () => {
@@ -147,7 +151,7 @@ onMounted(async () => {
   if (scanInfo.value.has_cache) {
     await scan(false);
   }
-  pollTimer = setInterval(refreshOpenStatus, 10000);
+  pollTimer = setInterval(refreshOpenStatus, 3000);
 });
 
 onUnmounted(() => {
@@ -227,6 +231,12 @@ async function refreshOpenStatus() {
     <!-- Status bar -->
     <div v-if="statusMessage" class="status-bar">{{ statusMessage }}</div>
 
+    <!-- Active workspace banner -->
+    <div v-if="activeWorkspace" class="active-banner" :style="{ '--ws-color': activeWorkspace.color || '#0078d4' }">
+      <span class="active-name">{{ activeWorkspace.name }}</span>
+      <span class="active-path">{{ activeWorkspace.display_path }}</span>
+    </div>
+
     <!-- Workspace List -->
     <div
       class="list-container"
@@ -257,7 +267,6 @@ async function refreshOpenStatus() {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           </button>
         </div>
-        <div class="ws-status" :class="{ open: ws.is_open }" :title="ws.is_open ? 'Open in VS Code' : 'Closed'"></div>
       </div>
     </div>
 
@@ -609,14 +618,29 @@ body {
   border-color: #1f6feb;
 }
 
-/* ── Open indicator dot ───────────────────────────────── */
-.ws-status {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: #21262d; flex-shrink: 0; margin-left: 6px;
+/* ── Active workspace banner ──────────────────────────── */
+.active-banner {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; flex-shrink: 0;
+  position: relative; overflow: hidden;
+  background:
+    radial-gradient(circle at 8% 99%, 
+      var(--ws-color) 0% 15%, var(--ws-color) 19%,
+      color-mix(in srgb, var(--ws-color) 85%, #000) 15% 32%, color-mix(in srgb, var(--ws-color) 85%, #000) 36%,
+      color-mix(in srgb, var(--ws-color) 65%, #000) 32% 48%, color-mix(in srgb, var(--ws-color) 65%, #000) 52%,
+      color-mix(in srgb, var(--ws-color) 45%, #000) 48% 65%, color-mix(in srgb, var(--ws-color) 45%, #000) 69%,
+      color-mix(in srgb, var(--ws-color) 25%, #000) 65% 100%
+    );
+  border-bottom: 1px solid #21262d;
 }
-.ws-status.open {
-  background: #3fb950;
-  box-shadow: 0 0 4px #3fb950;
+.active-name {
+  font-weight: 700; font-size: 16px; letter-spacing: 2px;
+  text-transform: uppercase; color: #fff;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+}
+.active-path {
+  font-size: 11px; color: rgba(255,255,255,0.7); margin-left: auto;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
 }
 
 /* ── Drop zone ────────────────────────────────────────── */
