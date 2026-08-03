@@ -102,6 +102,7 @@ fn scan_drive(drive_root: &Path) -> Vec<WorkspaceInfo> {
                     name,
                     display_path,
                     color: None,
+                    is_open: false,
                 });
             }
         }
@@ -132,6 +133,7 @@ fn quick_scan(cache: &Cache) -> Vec<WorkspaceInfo> {
                 name,
                 display_path,
                 color: None,
+                is_open: false,
             });
             cached_paths.insert(entry.path.clone(), true);
         }
@@ -185,6 +187,7 @@ fn quick_scan(cache: &Cache) -> Vec<WorkspaceInfo> {
                             name,
                             display_path,
                             color: None,
+                            is_open: false,
                         });
                     }
                 }
@@ -358,34 +361,39 @@ fn populate_colors(workspaces: &mut [WorkspaceInfo]) {
 }
 
 fn populate_open_status(workspaces: &mut [WorkspaceInfo]) {
-    // Batch-check all workspaces with a single wmic call
-    let open_paths = get_open_workspace_paths();
+    let open_names = get_open_workspace_names();
     for ws in workspaces.iter_mut() {
-        ws.is_open = open_paths.iter().any(|p| p == &ws.path);
+        let name = Path::new(&ws.path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+        ws.is_open = open_names.iter().any(|n| n == &name);
     }
 }
 
-fn get_open_workspace_paths() -> Vec<String> {
-    let output = Command::new("wmic")
-        .args(["process", "where", "name='Code.exe'", "get", "commandline", "/format:csv"])
+fn get_open_workspace_names() -> Vec<String> {
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-Command",
+            "[System.Diagnostics.Process]::GetProcessesByName('Code') | Where-Object { $_.MainWindowTitle } | ForEach-Object { $_.MainWindowTitle }"])
         .output();
     match output {
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout);
-            stdout
-                .lines()
-                .filter(|line| line.contains(".code-workspace"))
-                .filter_map(|line| {
-                    // Extract the .code-workspace path from the command line
-                    if let Some(start) = line.find('"') {
-                        let rest = &line[start + 1..];
-                        if let Some(end) = rest.find(".code-workspace") {
-                            return Some(format!("{}{}", &rest[..end], ".code-workspace"));
+            let mut names = Vec::new();
+            for line in stdout.lines() {
+                let line = line.trim();
+                if line.is_empty() { continue; }
+                if let Some(ws_pos) = line.find(" (Workspace)") {
+                    let before = &line[..ws_pos];
+                    if let Some(dash) = before.rfind(" - ") {
+                        let name = before[dash + 3..].trim();
+                        if !name.is_empty() && !names.contains(&name.to_string()) {
+                            names.push(name.to_string());
                         }
                     }
-                    None
-                })
-                .collect()
+                }
+            }
+            names
         }
         Err(_) => Vec::new(),
     }
@@ -645,6 +653,18 @@ async fn download_and_install(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn check_open_status(paths: Vec<String>) -> Vec<bool> {
+    let open_names = get_open_workspace_names();
+    paths.iter().map(|p| {
+        let name = Path::new(p)
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+        open_names.iter().any(|o| o == &name)
+    }).collect()
+}
+
+#[tauri::command]
 fn create_workspace(folder_path: String) -> Result<String, String> {
     let folder = Path::new(&folder_path);
     if !folder.is_dir() {
@@ -699,6 +719,7 @@ pub fn run() {
             create_workspace,
             check_update,
             download_and_install,
+            check_open_status,
             get_scan_info,
         ])
         .run(tauri::generate_context!())

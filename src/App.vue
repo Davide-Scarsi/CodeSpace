@@ -138,17 +138,41 @@ async function pickColor(color: string) {
 }
 
 // ── Lifecycle ────────────────────────────────────────────
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let polling = false;
+
 onMounted(async () => {
   setupDragDrop();
   await loadScanInfo();
   if (scanInfo.value.has_cache) {
     await scan(false);
   }
+  pollTimer = setInterval(refreshOpenStatus, 10000);
 });
 
 onUnmounted(() => {
   if (unlisten) unlisten();
+  if (pollTimer) clearInterval(pollTimer);
 });
+
+async function refreshOpenStatus() {
+  if (workspaces.value.length === 0 || polling) return;
+  polling = true;
+  const paths = workspaces.value.map(w => w.path);
+  try {
+    const statuses: boolean[] = await invoke("check_open_status", { paths });
+    const hasAny = statuses.some(s => s);
+    workspaces.value.forEach((ws, i) => {
+      if (hasAny || statuses[i]) {
+        ws.is_open = statuses[i] ?? false;
+      }
+    });
+  } catch (_) {
+    // Keep current state on error
+  } finally {
+    polling = false;
+  }
+}
 </script>
 
 <template>
@@ -583,6 +607,16 @@ body {
 .ws-btn-launch:hover {
   color: #58a6ff;
   border-color: #1f6feb;
+}
+
+/* ── Open indicator dot ───────────────────────────────── */
+.ws-status {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #21262d; flex-shrink: 0; margin-left: 6px;
+}
+.ws-status.open {
+  background: #3fb950;
+  box-shadow: 0 0 4px #3fb950;
 }
 
 /* ── Drop zone ────────────────────────────────────────── */
