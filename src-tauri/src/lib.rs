@@ -15,6 +15,7 @@ pub struct WorkspaceInfo {
     pub name: String,
     pub display_path: String,
     pub color: Option<String>,
+    pub is_open: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -356,6 +357,40 @@ fn populate_colors(workspaces: &mut [WorkspaceInfo]) {
     }
 }
 
+fn populate_open_status(workspaces: &mut [WorkspaceInfo]) {
+    // Batch-check all workspaces with a single wmic call
+    let open_paths = get_open_workspace_paths();
+    for ws in workspaces.iter_mut() {
+        ws.is_open = open_paths.iter().any(|p| p == &ws.path);
+    }
+}
+
+fn get_open_workspace_paths() -> Vec<String> {
+    let output = Command::new("wmic")
+        .args(["process", "where", "name='Code.exe'", "get", "commandline", "/format:csv"])
+        .output();
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            stdout
+                .lines()
+                .filter(|line| line.contains(".code-workspace"))
+                .filter_map(|line| {
+                    // Extract the .code-workspace path from the command line
+                    if let Some(start) = line.find('"') {
+                        let rest = &line[start + 1..];
+                        if let Some(end) = rest.find(".code-workspace") {
+                            return Some(format!("{}{}", &rest[..end], ".code-workspace"));
+                        }
+                    }
+                    None
+                })
+                .collect()
+        }
+        Err(_) => Vec::new(),
+    }
+}
+
 // ── Tauri Commands ─────────────────────────────────────────────
 
 #[tauri::command]
@@ -376,6 +411,7 @@ fn scan_workspaces(app: tauri::AppHandle, force_full: bool) -> Vec<WorkspaceInfo
     workspaces.retain(|w| seen.insert(w.path.clone(), true).is_none());
 
     populate_colors(&mut workspaces);
+    populate_open_status(&mut workspaces);
     save_cache(&app, &workspaces);
     workspaces
 }
