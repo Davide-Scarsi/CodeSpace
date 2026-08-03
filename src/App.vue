@@ -621,10 +621,11 @@ body {
 /* ── Active workspace banner ──────────────────────────── */
 .active-banner {
   display: flex; align-items: center; gap: 12px;
-  padding: 24px 16px; flex-shrink: 0;
+  padding: 24px 16px 24px 50px; flex-shrink: 0;
   position: relative; overflow: hidden;
   background:
-    radial-gradient(circle at 8% 99%, 
+    linear-gradient(90deg, var(--ws-color) 0% 20%, transparent 20%),
+    radial-gradient(circle at 20% 99%, 
       var(--ws-color) 0% 15%, var(--ws-color) 19%,
       color-mix(in srgb, var(--ws-color) 85%, #000) 15% 32%, color-mix(in srgb, var(--ws-color) 85%, #000) 36%,
       color-mix(in srgb, var(--ws-color) 65%, #000) 32% 48%, color-mix(in srgb, var(--ws-color) 65%, #000) 52%,
