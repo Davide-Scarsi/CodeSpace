@@ -621,7 +621,7 @@ body {
 /* ── Active workspace banner ──────────────────────────── */
 .active-banner {
   display: flex; align-items: center; gap: 12px;
-  padding: 12px 16px; flex-shrink: 0;
+  padding: 24px 16px; flex-shrink: 0;
   position: relative; overflow: hidden;
   background:
     radial-gradient(circle at 8% 99%, 
@@ -634,7 +634,7 @@ body {
   border-bottom: 1px solid #21262d;
 }
 .active-name {
-  font-weight: 700; font-size: 16px; letter-spacing: 2px;
+  font-weight: 700; font-size: 24px; letter-spacing: 2px;
   text-transform: uppercase; color: #fff;
   text-shadow: 0 1px 4px rgba(0,0,0,0.6);
 }
