@@ -252,69 +252,84 @@ fn load_cache(app: &tauri::AppHandle) -> Option<Cache> {
 // ── Peacock Color ─────────────────────────────────────────────
 
 /// Reads the Peacock color from a workspace. Tries in order:
-/// 1. .code-workspace file's "settings.peacock.color"
-/// 2. .code-workspace file's "settings.workbench.colorCustomizations"
-/// 3. .vscode/settings.json (from workspace file parent or resolved folder)
-fn read_peacock_color(workspace_path: &str) -> Option<String> {
+// ── Color Store (local cache, no Peacock dependency) ──────────
+
+fn colors_cache_path() -> PathBuf {
+    let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".into());
+    Path::new(&appdata).join("CodeSpace").join("colors.json")
+}
+
+fn load_colors_cache() -> HashMap<String, String> {
+    let path = colors_cache_path();
+    if let Ok(content) = fs::read_to_string(&path) {
+        if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
+            return map;
+        }
+    }
+    HashMap::new()
+}
+
+fn save_colors_cache(cache: &HashMap<String, String>) {
+    let path = colors_cache_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(&path, serde_json::to_string_pretty(cache).unwrap_or_default());
+}
+
+/// Read workspace color: local cache → .vscode/settings.json → .code-workspace
+fn read_workspace_color(workspace_path: &str) -> Option<String> {
+    // 1. Local CodeSpace cache
+    let cache = load_colors_cache();
+    if let Some(color) = cache.get(workspace_path) {
+        return Some(color.clone());
+    }
+
     let ws_file = Path::new(workspace_path);
 
-    // --- Step 1 & 2: Read the .code-workspace file itself ---
-    if let Ok(content) = fs::read_to_string(ws_file) {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-            // Try peacock.color in workspace settings
-            if let Some(settings) = json.get("settings") {
-                if let Some(color) = settings.get("peacock.color").and_then(|v| v.as_str()) {
-                    let _ = log_debug(ws_file, &format!("found in .code-workspace settings.peacock.color: {}", color));
-                    return Some(color.to_string());
-                }
-                if let Some(wb) = settings.get("workbench.colorCustomizations") {
-                    if let Some(color) = extract_color_from_customizations(wb) {
-                        let _ = log_debug(ws_file, &format!("found in .code-workspace settings.workbench: {}", color));
-                        return Some(color);
-                    }
+    // 2. .vscode/settings.json workbench.colorCustomizations
+    let project_dir = resolve_project_dir(ws_file);
+    let settings_path = project_dir.join(".vscode").join("settings.json");
+    if let Ok(content) = fs::read_to_string(&settings_path) {
+        if let Ok(settings) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(wb) = settings.get("workbench.colorCustomizations") {
+                if let Some(color) = extract_color_from_customizations(wb) {
+                    return Some(color);
                 }
             }
+        }
+    }
 
-            // Resolve project folder from "folders" array
-            let project_dir = if let Some(folders) = json.get("folders").and_then(|v| v.as_array()) {
-                if let Some(first) = folders.first() {
-                    if let Some(folder_path) = first.get("path").and_then(|v| v.as_str()) {
-                        let base = ws_file.parent().unwrap_or(Path::new("."));
-                        let resolved = base.join(folder_path);
-                        let _ = log_debug(ws_file, &format!("resolved folder from .code-workspace: {:?}", resolved));
-                        resolved
-                    } else {
-                        ws_file.parent()?.to_path_buf()
-                    }
-                } else {
-                    ws_file.parent()?.to_path_buf()
-                }
-            } else {
-                ws_file.parent()?.to_path_buf()
-            };
-
-            // --- Step 3: .vscode/settings.json ---
-            let settings_path = project_dir.join(".vscode").join("settings.json");
-            let _ = log_debug(ws_file, &format!("checking settings.json: {:?}", settings_path));
-            if let Ok(content) = fs::read_to_string(&settings_path) {
-                if let Ok(settings) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(color) = settings.get("peacock.color").and_then(|v| v.as_str()) {
-                        let _ = log_debug(ws_file, &format!("found in settings.json peacock.color: {}", color));
-                        return Some(color.to_string());
-                    }
-                    if let Some(wb) = settings.get("workbench.colorCustomizations") {
-                        if let Some(color) = extract_color_from_customizations(wb) {
-                            let _ = log_debug(ws_file, &format!("found in settings.json workbench: {}", color));
-                            return Some(color);
-                        }
+    // 3. .code-workspace file (backward compat with Peacock)
+    if let Ok(content) = fs::read_to_string(ws_file) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(settings) = json.get("settings") {
+                if let Some(wb) = settings.get("workbench.colorCustomizations") {
+                    if let Some(color) = extract_color_from_customizations(wb) {
+                        return Some(color);
                     }
                 }
             }
         }
     }
 
-    let _ = log_debug(ws_file, "no color found");
     None
+}
+
+fn resolve_project_dir(ws_file: &Path) -> PathBuf {
+    if let Ok(content) = fs::read_to_string(ws_file) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(folders) = json.get("folders").and_then(|v| v.as_array()) {
+                if let Some(first) = folders.first() {
+                    if let Some(folder_path) = first.get("path").and_then(|v| v.as_str()) {
+                        let base = ws_file.parent().unwrap_or(Path::new("."));
+                        return base.join(folder_path);
+                    }
+                }
+            }
+        }
+    }
+    ws_file.parent().unwrap_or(Path::new(".")).to_path_buf()
 }
 
 fn extract_color_from_customizations(customizations: &serde_json::Value) -> Option<String> {
@@ -335,19 +350,9 @@ fn extract_color_from_customizations(customizations: &serde_json::Value) -> Opti
     None
 }
 
-fn log_debug(ws_file: &Path, msg: &str) -> std::io::Result<()> {
-    let log_path = std::env::temp_dir().join("codespace_debug.log");
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)?;
-    use std::io::Write;
-    writeln!(file, "[{}] {:?}: {}", chrono::Local::now().format("%H:%M:%S"), ws_file, msg)
-}
-
 fn populate_colors(workspaces: &mut [WorkspaceInfo]) {
     for ws in workspaces.iter_mut() {
-        ws.color = read_peacock_color(&ws.path);
+        ws.color = read_workspace_color(&ws.path);
     }
 }
 
@@ -390,86 +395,125 @@ fn launch_workspace(path: String) -> Result<(), String> {
 
 #[tauri::command]
 fn get_workspace_color(workspace_path: String) -> Option<String> {
-    read_peacock_color(&workspace_path)
+    read_workspace_color(&workspace_path)
 }
 
 #[tauri::command]
 fn set_workspace_color(workspace_path: String, color: String) -> Result<(), String> {
     let ws_file = Path::new(&workspace_path);
-    let project_dir = ws_file.parent().ok_or("Invalid workspace path")?;
+    let project_dir = resolve_project_dir(ws_file);
 
-    // ── 1. Write to .vscode/settings.json ─────────────────
+    // ── Write to .vscode/settings.json ──
     let vscode_dir = project_dir.join(".vscode");
+    fs::create_dir_all(&vscode_dir)
+        .map_err(|e| format!("Cannot create .vscode dir: {}", e))?;
     let settings_path = vscode_dir.join("settings.json");
+    update_color_in_json_file(&settings_path, &color)?;
 
-    let mut folder_settings: serde_json::Value = if settings_path.exists() {
-        let content = fs::read_to_string(&settings_path)
-            .map_err(|e| format!("Cannot read settings.json: {}", e))?;
-        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
-    } else {
-        fs::create_dir_all(&vscode_dir)
-            .map_err(|e| format!("Cannot create .vscode dir: {}", e))?;
-        serde_json::json!({})
-    };
-
-    write_peacock_to_json(&mut folder_settings, &color);
-    let json = serde_json::to_string_pretty(&folder_settings)
-        .map_err(|e| format!("Cannot serialize: {}", e))?;
-    fs::write(&settings_path, json)
-        .map_err(|e| format!("Cannot write settings.json: {}", e))?;
-
-    // ── 2. Also write to .code-workspace file if it has a "settings" key ──
+    // ── Write to .code-workspace file ──
     if let Ok(content) = fs::read_to_string(ws_file) {
         if let Ok(mut ws_json) = serde_json::from_str::<serde_json::Value>(&content) {
-            if ws_json.get("settings").is_some() || ws_json.get("folders").is_some() {
-                if ws_json.get("settings").is_none() {
-                    ws_json["settings"] = serde_json::json!({});
-                }
-                let ws_settings = &mut ws_json["settings"];
-                write_peacock_to_json(ws_settings, &color);
-
-                let ws_content = serde_json::to_string_pretty(&ws_json)
-                    .map_err(|e| format!("Cannot serialize workspace: {}", e))?;
-                fs::write(ws_file, ws_content)
-                    .map_err(|e| format!("Cannot write .code-workspace: {}", e))?;
+            if ws_json.get("settings").is_none() {
+                ws_json["settings"] = serde_json::json!({});
             }
+            let s = &mut ws_json["settings"];
+            write_full_color_overrides(s, &color);
+            let ws_content = serde_json::to_string_pretty(&ws_json)
+                .map_err(|e| format!("Cannot serialize: {}", e))?;
+            fs::write(ws_file, ws_content)
+                .map_err(|e| format!("Cannot write workspace file: {}", e))?;
         }
     }
+
+    // ── Save to local cache ──
+    let mut cache = load_colors_cache();
+    cache.insert(workspace_path, color);
+    save_colors_cache(&cache);
 
     Ok(())
 }
 
-fn write_peacock_to_json(settings: &mut serde_json::Value, color: &str) {
-    settings["peacock.color"] = serde_json::Value::String(color.to_string());
+fn update_color_in_json_file(path: &Path, color: &str) -> Result<(), String> {
+    let mut json: serde_json::Value = if path.exists() {
+        let content = fs::read_to_string(path)
+            .map_err(|e| format!("Cannot read {}: {}", path.display(), e))?;
+        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+    write_full_color_overrides(&mut json, color);
+    let out = serde_json::to_string_pretty(&json)
+        .map_err(|e| format!("Cannot serialize: {}", e))?;
+    fs::write(path, out)
+        .map_err(|e| format!("Cannot write {}: {}", path.display(), e))
+}
 
-    if settings.get("workbench.colorCustomizations").is_none() {
+/// Write the full set of workbench.colorCustomizations (VS Code native).
+/// Removes any old `peacock.color` key.
+fn write_full_color_overrides(settings: &mut serde_json::Value, color: &str) {
+    // Remove old Peacock key
+    settings.as_object_mut().map(|o| o.remove("peacock.color"));
+
+    let obj = settings["workbench.colorCustomizations"]
+        .as_object_mut()
+        .map(|o| {
+            // Clear all existing color keys, keep non-color ones if any
+            o.clear();
+        });
+
+    if obj.is_none() {
         settings["workbench.colorCustomizations"] = serde_json::json!({});
     }
+
     let wb = &mut settings["workbench.colorCustomizations"];
     wb["titleBar.activeBackground"] = serde_json::Value::String(color.to_string());
     wb["titleBar.activeForeground"] = serde_json::Value::String("#ffffff".into());
+    wb["titleBar.inactiveBackground"] = serde_json::Value::String(format!("{}99", color));
+    wb["titleBar.inactiveForeground"] = serde_json::Value::String("#ffffff99".into());
+    wb["activityBar.activeBackground"] = serde_json::Value::String(color.to_string());
     wb["activityBar.background"] = serde_json::Value::String(color.to_string());
     wb["activityBar.foreground"] = serde_json::Value::String("#ffffff".into());
+    wb["activityBar.inactiveForeground"] = serde_json::Value::String("#ffffff99".into());
+    wb["activityBarBadge.background"] = serde_json::Value::String(color.to_string());
+    wb["activityBarBadge.foreground"] = serde_json::Value::String("#ffffff".into());
     wb["statusBar.background"] = serde_json::Value::String(color.to_string());
     wb["statusBar.foreground"] = serde_json::Value::String("#ffffff".into());
+    wb["statusBar.debuggingBackground"] = serde_json::Value::String(color.to_string());
+    wb["statusBar.debuggingForeground"] = serde_json::Value::String("#ffffff".into());
+    wb["statusBarItem.hoverBackground"] = serde_json::Value::String(darken(color));
+    wb["statusBarItem.remoteBackground"] = serde_json::Value::String(color.to_string());
+    wb["statusBarItem.remoteForeground"] = serde_json::Value::String("#ffffff".into());
+    wb["sash.hoverBorder"] = serde_json::Value::String(color.to_string());
+    wb["commandCenter.border"] = serde_json::Value::String("#ffffff99".into());
+    wb["commandCenter.foreground"] = serde_json::Value::String("#ffffff".into());
 }
 
-fn remove_peacock_from_json(settings: &mut serde_json::Value) {
-    settings.as_object_mut().map(|o| o.remove("peacock.color"));
-    settings.as_object_mut().map(|o| o.remove("workbench.colorCustomizations"));
+/// Darken a hex color by ~20%
+fn darken(hex: &str) -> String {
+    let hex = hex.trim_start_matches('#');
+    if hex.len() != 6 {
+        return format!("#{}", hex);
+    }
+    let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0);
+    let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(0);
+    let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0);
+    format!("#{:02x}{:02x}{:02x}",
+        r.saturating_mul(8).saturating_div(10),
+        g.saturating_mul(8).saturating_div(10),
+        b.saturating_mul(8).saturating_div(10))
 }
 
 #[tauri::command]
 fn remove_workspace_color(workspace_path: String) -> Result<(), String> {
     let ws_file = Path::new(&workspace_path);
-    let project_dir = ws_file.parent().ok_or("Invalid workspace path")?;
+    let project_dir = resolve_project_dir(ws_file);
 
     // 1. Remove from .vscode/settings.json
     let settings_path = project_dir.join(".vscode").join("settings.json");
     if settings_path.exists() {
         if let Ok(content) = fs::read_to_string(&settings_path) {
             if let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content) {
-                remove_peacock_from_json(&mut settings);
+                settings.as_object_mut().map(|o| { o.remove("peacock.color"); o.remove("workbench.colorCustomizations"); });
                 let json = serde_json::to_string_pretty(&settings)
                     .map_err(|e| format!("Cannot serialize: {}", e))?;
                 fs::write(&settings_path, json)
@@ -482,14 +526,19 @@ fn remove_workspace_color(workspace_path: String) -> Result<(), String> {
     if let Ok(content) = fs::read_to_string(ws_file) {
         if let Ok(mut ws_json) = serde_json::from_str::<serde_json::Value>(&content) {
             if let Some(settings) = ws_json.get_mut("settings") {
-                remove_peacock_from_json(settings);
+                settings.as_object_mut().map(|o| { o.remove("peacock.color"); o.remove("workbench.colorCustomizations"); });
                 let ws_content = serde_json::to_string_pretty(&ws_json)
-                    .map_err(|e| format!("Cannot serialize workspace: {}", e))?;
+                    .map_err(|e| format!("Cannot serialize: {}", e))?;
                 fs::write(ws_file, ws_content)
-                    .map_err(|e| format!("Cannot write .code-workspace: {}", e))?;
+                    .map_err(|e| format!("Cannot write workspace file: {}", e))?;
             }
         }
     }
+
+    // 3. Remove from local cache
+    let mut cache = load_colors_cache();
+    cache.remove(&workspace_path);
+    save_colors_cache(&cache);
 
     Ok(())
 }
