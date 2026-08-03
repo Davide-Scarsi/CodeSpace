@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::SystemTime;
+use tauri::Emitter;
 use tauri::Manager;
 use walkdir::WalkDir;
 
@@ -371,39 +372,88 @@ fn populate_open_status(workspaces: &mut [WorkspaceInfo]) {
     }
 }
 
-fn get_open_workspace_names() -> Vec<String> {
-    let mut cmd = Command::new("powershell");
-    cmd.args(["-NoProfile", "-Command",
-        "[System.Diagnostics.Process]::GetProcessesByName('Code') | Where-Object { $_.MainWindowTitle } | ForEach-Object { $_.MainWindowTitle }"]);
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+/// Extract workspace name from a VS Code window title.
+/// VS Code titles look like: "file.ts ● WorkspaceName (Workspace) - Visual Studio Code"
+fn extract_ws_name_from_title(title: &str) -> Option<String> {
+    if let Some(ws_pos) = title.find(" (Workspace)") {
+        let before = &title[..ws_pos];
+        // Try " - " separator first (file open: "file.ts - WorkspaceName (Workspace)")
+        let name = if let Some(dash) = before.rfind(" - ") {
+            before[dash + 3..].trim().to_string()
+        } else {
+            // Try "●" separator (no file open: "● WorkspaceName (Workspace)")
+            if let Some(dot) = before.rfind('●') {
+                before[dot + '●'.len_utf8()..].trim().to_string()
+            } else {
+                before.trim().to_string()
+            }
+        };
+        if !name.is_empty() {
+            return Some(name);
+        }
     }
+    None
+}
 
-    let output = cmd.output();
-    match output {
-        Ok(out) => {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            let mut names = Vec::new();
-            for line in stdout.lines() {
-                let line = line.trim();
-                if line.is_empty() { continue; }
-                if let Some(ws_pos) = line.find(" (Workspace)") {
-                    let before = &line[..ws_pos];
-                    if let Some(dash) = before.rfind(" - ") {
-                        let name = before[dash + 3..].trim();
-                        if !name.is_empty() && !names.contains(&name.to_string()) {
-                            names.push(name.to_string());
-                        }
-                    }
+fn get_open_workspace_names() -> Vec<String> {
+    let mut names = Vec::new();
+    let names_ptr = &mut names as *mut Vec<String>;
+
+    unsafe extern "system" fn enum_callback(hwnd: isize, lparam: isize) -> i32 {
+        let names = &mut *(lparam as *mut Vec<String>);
+        if IsWindowVisible(hwnd) == 0 {
+            return 1;
+        }
+        let mut buf = [0u16; 512];
+        let len = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+        if len > 0 {
+            let title = String::from_utf16_lossy(&buf[..len as usize]);
+            eprintln!("[DEBUG] Window: \"{}\"", title);
+            if let Some(name) = extract_ws_name_from_title(&title) {
+                eprintln!("[DEBUG]   -> extracted name: \"{}\"", name);
+                if !names.contains(&name) {
+                    names.push(name);
                 }
             }
-            names
         }
-        Err(_) => Vec::new(),
+        1
     }
+
+    unsafe { EnumWindows(enum_callback, names_ptr as isize) };
+    eprintln!("[DEBUG] open workspace names: {:?}", names);
+    names
+}
+
+/// Get the active (foreground) workspace name by checking the foreground window
+fn get_active_workspace_name() -> Option<String> {
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd == 0 {
+            return None;
+        }
+        let mut buf = [0u16; 512];
+        let len = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+        if len > 0 {
+            let title = String::from_utf16_lossy(&buf[..len as usize]);
+            eprintln!("[DEBUG] Foreground window: \"{}\"", title);
+            extract_ws_name_from_title(&title)
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(windows)]
+extern "system" {
+    fn EnumWindows(cb: unsafe extern "system" fn(hwnd: isize, lparam: isize) -> i32, lparam: isize) -> i32;
+    fn GetWindowTextW(hwnd: isize, buf: *mut u16, max: i32) -> i32;
+    fn IsWindowVisible(hwnd: isize) -> i32;
+    fn GetForegroundWindow() -> isize;
+}
+
+#[cfg(not(windows))]
+fn get_open_workspace_names() -> Vec<String> {
+    Vec::new()
 }
 
 // ── Tauri Commands ─────────────────────────────────────────────
@@ -671,6 +721,46 @@ fn check_open_status(paths: Vec<String>) -> Vec<bool> {
     }).collect()
 }
 
+/// Payload emitted on "workspace-changed" events
+#[derive(Debug, Clone, Serialize)]
+struct MonitorPayload {
+    open_names: Vec<String>,
+    active_name: Option<String>,
+}
+
+/// Spawns a background thread that monitors VS Code windows via Win32 API.
+/// Emits "workspace-changed" events with the list of open workspace names
+/// plus the currently active (foreground) workspace.
+#[tauri::command]
+fn start_workspace_monitor(app: tauri::AppHandle) {
+    eprintln!("[DEBUG] start_workspace_monitor called");
+    std::thread::spawn(move || {
+        let mut last_payload: Option<MonitorPayload> = None;
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            let names = get_open_workspace_names();
+            let active = get_active_workspace_name();
+            let payload = MonitorPayload {
+                open_names: names,
+                active_name: active,
+            };
+            let changed = match &last_payload {
+                Some(p) => p.open_names != payload.open_names || p.active_name != payload.active_name,
+                None => true,
+            };
+            eprintln!("[DEBUG] monitor tick: open={:?}, active={:?}", payload.open_names, payload.active_name);
+            if changed {
+                eprintln!("[DEBUG] emitting workspace-changed: {:?}", payload);
+                match app.emit("workspace-changed", &payload) {
+                    Ok(_) => eprintln!("[DEBUG] emit OK"),
+                    Err(e) => eprintln!("[DEBUG] emit ERROR: {}", e),
+                }
+                last_payload = Some(payload);
+            }
+        }
+    });
+}
+
 #[tauri::command]
 fn create_workspace(folder_path: String) -> Result<String, String> {
     let folder = Path::new(&folder_path);
@@ -726,6 +816,7 @@ pub fn run() {
             check_update,
             download_and_install,
             check_open_status,
+            start_workspace_monitor,
             get_scan_info,
         ])
         .run(tauri::generate_context!())

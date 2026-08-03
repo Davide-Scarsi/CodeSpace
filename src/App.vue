@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import VscodeIcon from "./components/VscodeIcon.vue";
 import UpdateBanner from "./components/UpdateBanner.vue";
@@ -138,12 +139,17 @@ async function pickColor(color: string) {
 }
 
 // ── Lifecycle ────────────────────────────────────────────
-let pollTimer: ReturnType<typeof setInterval> | null = null;
-const activeWorkspace = computed(() =>
-  workspaces.value.find(w => w.is_open) || null
-);
+const activeWorkspace = computed(() => {
+  if (debugActiveName.value) {
+    return workspaces.value.find(w => w.name === debugActiveName.value) || null;
+  }
+  // Fallback: first open workspace
+  return workspaces.value.find(w => w.is_open) || null;
+});
 
-let polling = false;
+let unlistenWs: (() => void) | null = null;
+const debugOpenNames = ref<string[]>([]);
+const debugActiveName = ref<string | null>(null);
 
 onMounted(async () => {
   setupDragDrop();
@@ -151,32 +157,27 @@ onMounted(async () => {
   if (scanInfo.value.has_cache) {
     await scan(false);
   }
-  pollTimer = setInterval(refreshOpenStatus, 3000);
+
+  // Start background monitor (Win32 API, event-driven)
+  console.log("[DEBUG] calling start_workspace_monitor");
+  await invoke("start_workspace_monitor");
+  console.log("[DEBUG] start_workspace_monitor returned, setting up listener");
+  unlistenWs = await listen<{ open_names: string[]; active_name: string | null }>("workspace-changed", (event) => {
+    const { open_names, active_name } = event.payload;
+    console.log("[DEBUG] workspace-changed received:", JSON.stringify(event.payload));
+    debugOpenNames.value = open_names;
+    debugActiveName.value = active_name;
+    workspaces.value.forEach((ws) => {
+      ws.is_open = open_names.includes(ws.name);
+    });
+  });
+  console.log("[DEBUG] listener set up");
 });
 
 onUnmounted(() => {
   if (unlisten) unlisten();
-  if (pollTimer) clearInterval(pollTimer);
+  if (unlistenWs) unlistenWs();
 });
-
-async function refreshOpenStatus() {
-  if (workspaces.value.length === 0 || polling) return;
-  polling = true;
-  const paths = workspaces.value.map(w => w.path);
-  try {
-    const statuses: boolean[] = await invoke("check_open_status", { paths });
-    const hasAny = statuses.some(s => s);
-    workspaces.value.forEach((ws, i) => {
-      if (hasAny || statuses[i]) {
-        ws.is_open = statuses[i] ?? false;
-      }
-    });
-  } catch (_) {
-    // Keep current state on error
-  } finally {
-    polling = false;
-  }
-}
 </script>
 
 <template>
@@ -188,6 +189,11 @@ async function refreshOpenStatus() {
     </header>
 
     <UpdateBanner />
+
+    <!-- DEBUG: mostra raw open names e active -->
+    <div style="background:#330;color:#ff0;padding:4px 12px;font-size:11px;font-family:monospace" v-if="debugOpenNames.length >= 0">
+      DEBUG openNames: [{{ debugOpenNames.join(', ') }}] | active: {{ debugActiveName || 'none' }} | computed: {{ activeWorkspace?.name || 'none' }}
+    </div>
 
     <!-- Toolbar -->
     <div class="toolbar">
@@ -251,7 +257,11 @@ async function refreshOpenStatus() {
         v-for="ws in filteredWorkspaces"
         :key="ws.path"
         class="ws-card"
+        :class="{ 'ws-open': ws.is_open, 'ws-active': ws.is_open && ws.name === activeWorkspace?.name }"
       >
+        <div class="ws-traffic-light" :class="{ open: ws.is_open, active: ws.is_open && ws.name === activeWorkspace?.name }">
+          <span v-if="ws.is_open" class="dot" :class="{ active: ws.name === activeWorkspace?.name }"></span>
+        </div>
         <div class="ws-icon">
           <VscodeIcon :color="ws.color" :size="28" />
         </div>
@@ -548,6 +558,55 @@ body {
 .ws-card:hover {
   background: #1c2128;
   border-color: #30363d;
+}
+
+.ws-card.ws-open {
+  background: #0d1a14;
+  border-color: #1a3a2a;
+}
+
+.ws-card.ws-open:hover {
+  background: #111f19;
+  border-color: #1f4d33;
+}
+
+.ws-card.ws-active {
+  background: #0d1f2d;
+  border-color: #1a3a5a;
+}
+
+.ws-card.ws-active:hover {
+  background: #112538;
+  border-color: #1f4d7a;
+}
+
+/* ── Traffic light ────────────────────────────────────── */
+.ws-traffic-light {
+  flex-shrink: 0;
+  width: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ws-traffic-light .dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2ea043;
+  box-shadow: 0 0 6px #2ea04388;
+}
+
+.ws-traffic-light .dot.active {
+  background: #58a6ff;
+  box-shadow: 0 0 8px #58a6ff99;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 6px #58a6ff88; }
+  50% { box-shadow: 0 0 12px #58a6ffcc; }
 }
 
 .ws-icon {
