@@ -174,7 +174,13 @@ onMounted(async () => {
     const { open_names, active_name } = event.payload;
     // console.log("[DEBUG] workspace-changed received:", JSON.stringify(event.payload));
     debugOpenNames.value = open_names;
-    debugActiveName.value = active_name;
+    // Keep last known active workspace when none has focus
+    if (active_name !== null) {
+      debugActiveName.value = active_name;
+    } else if (debugActiveName.value && !open_names.includes(debugActiveName.value)) {
+      // Last active workspace was closed — clear it so fallback picks another open one
+      debugActiveName.value = null;
+    }
     workspaces.value.forEach((ws) => {
       ws.is_open = open_names.includes(ws.name);
     });
