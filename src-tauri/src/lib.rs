@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 use tauri::Emitter;
 use tauri::Manager;
@@ -449,6 +450,8 @@ extern "system" {
     fn GetWindowTextW(hwnd: isize, buf: *mut u16, max: i32) -> i32;
     fn IsWindowVisible(hwnd: isize) -> i32;
     fn GetForegroundWindow() -> isize;
+    fn SetForegroundWindow(hwnd: isize) -> i32;
+    fn ShowWindow(hwnd: isize, cmd: i32) -> i32;
 }
 
 #[cfg(not(windows))]
@@ -710,6 +713,67 @@ async fn download_and_install(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn focus_workspace(name: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        // Build the VS Code title pattern: "WorkspaceName (Workspace) - Visual Studio Code"
+        let title_pattern = format!("{} (Workspace) - Visual Studio Code", name);
+        eprintln!("[DEBUG] focus_workspace looking for: \"{}\"", title_pattern);
+
+        unsafe {
+            let hwnd = find_window_by_title(&title_pattern);
+            if hwnd == 0 {
+                return Err(format!("Window not found for: {}", name));
+            }
+            // Bring to foreground
+            if SetForegroundWindow(hwnd) == 0 {
+                return Err("Failed to bring window to foreground".into());
+            }
+            // Restore if minimized
+            ShowWindow(hwnd, 9); // SW_RESTORE
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        Err("focus_workspace is only supported on Windows".into())
+    }
+}
+
+#[cfg(windows)]
+unsafe fn find_window_by_title(partial_title: &str) -> isize {
+    struct FocusCtx {
+        partial: String,
+        found: isize,
+    }
+
+    unsafe extern "system" fn enum_cb(hwnd: isize, lparam: isize) -> i32 {
+        let ctx = &mut *(lparam as *mut FocusCtx);
+        if IsWindowVisible(hwnd) == 0 {
+            return 1;
+        }
+        let mut buf = [0u16; 512];
+        let len = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+        if len > 0 {
+            let title = String::from_utf16_lossy(&buf[..len as usize]);
+            if title.contains(&ctx.partial) && ctx.found == 0 {
+                ctx.found = hwnd;
+                return 0;
+            }
+        }
+        1
+    }
+
+    let mut ctx = FocusCtx {
+        partial: partial_title.to_string(),
+        found: 0,
+    };
+
+    EnumWindows(enum_cb, &mut ctx as *mut FocusCtx as isize);
+    ctx.found
+}
+
+#[tauri::command]
 fn check_open_status(paths: Vec<String>) -> Vec<bool> {
     let open_names = get_open_workspace_names();
     paths.iter().map(|p| {
@@ -728,16 +792,26 @@ struct MonitorPayload {
     active_name: Option<String>,
 }
 
+/// Shared flag to signal the background monitor to stop
+static MONITOR_RUNNING: AtomicBool = AtomicBool::new(false);
+
 /// Spawns a background thread that monitors VS Code windows via Win32 API.
 /// Emits "workspace-changed" events with the list of open workspace names
 /// plus the currently active (foreground) workspace.
 #[tauri::command]
 fn start_workspace_monitor(app: tauri::AppHandle) {
+    if MONITOR_RUNNING.swap(true, Ordering::SeqCst) {
+        eprintln!("[DEBUG] start_workspace_monitor: already running, skipping");
+        return;
+    }
     eprintln!("[DEBUG] start_workspace_monitor called");
     std::thread::spawn(move || {
         let mut last_payload: Option<MonitorPayload> = None;
-        loop {
+        while MONITOR_RUNNING.load(Ordering::SeqCst) {
             std::thread::sleep(std::time::Duration::from_secs(2));
+            if !MONITOR_RUNNING.load(Ordering::SeqCst) {
+                break;
+            }
             let names = get_open_workspace_names();
             let active = get_active_workspace_name();
             let payload = MonitorPayload {
@@ -758,7 +832,15 @@ fn start_workspace_monitor(app: tauri::AppHandle) {
                 last_payload = Some(payload);
             }
         }
+        eprintln!("[DEBUG] monitor thread exiting");
     });
+}
+
+/// Stop the background workspace monitor
+#[tauri::command]
+fn stop_workspace_monitor() {
+    eprintln!("[DEBUG] stop_workspace_monitor called");
+    MONITOR_RUNNING.store(false, Ordering::SeqCst);
 }
 
 #[tauri::command]
@@ -817,7 +899,9 @@ pub fn run() {
             download_and_install,
             check_open_status,
             start_workspace_monitor,
+            stop_workspace_monitor,
             get_scan_info,
+            focus_workspace,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

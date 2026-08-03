@@ -101,6 +101,14 @@ async function launchWorkspace(path: string) {
   }
 }
 
+async function focusWorkspace(name: string) {
+  try {
+    await invoke("focus_workspace", { name });
+  } catch (e) {
+    statusMessage.value = `Focus error: ${e}`;
+  }
+}
+
 // ── Color Modal ─────────────────────────────────────────
 const modalWs = ref<WorkspaceInfo | null>(null);
 
@@ -177,6 +185,7 @@ onMounted(async () => {
 onUnmounted(() => {
   if (unlisten) unlisten();
   if (unlistenWs) unlistenWs();
+  invoke("stop_workspace_monitor").catch(() => {});
 });
 </script>
 
@@ -258,6 +267,7 @@ onUnmounted(() => {
         :key="ws.path"
         class="ws-card"
         :class="{ 'ws-open': ws.is_open, 'ws-active': ws.is_open && ws.name === activeWorkspace?.name }"
+        @click="ws.is_open ? focusWorkspace(ws.name) : launchWorkspace(ws.path)"
       >
         <div class="ws-traffic-light" :class="{ open: ws.is_open, active: ws.is_open && ws.name === activeWorkspace?.name }">
           <span v-if="ws.is_open" class="dot" :class="{ active: ws.name === activeWorkspace?.name }"></span>
@@ -553,6 +563,7 @@ body {
   margin: 2px 0;
   border-radius: 6px;
   border: 1px solid transparent;
+  cursor: pointer;
 }
 
 .ws-card:hover {
