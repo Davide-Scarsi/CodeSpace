@@ -409,9 +409,9 @@ fn get_open_workspace_names() -> Vec<String> {
         let len = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
         if len > 0 {
             let title = String::from_utf16_lossy(&buf[..len as usize]);
-            eprintln!("[DEBUG] Window: \"{}\"", title);
+            // eprintln!("[DEBUG] Window: \"{}\"", title);
             if let Some(name) = extract_ws_name_from_title(&title) {
-                eprintln!("[DEBUG]   -> extracted name: \"{}\"", name);
+                // eprintln!("[DEBUG]   -> extracted name: \"{}\"", name);
                 if !names.contains(&name) {
                     names.push(name);
                 }
@@ -421,7 +421,7 @@ fn get_open_workspace_names() -> Vec<String> {
     }
 
     unsafe { EnumWindows(enum_callback, names_ptr as isize) };
-    eprintln!("[DEBUG] open workspace names: {:?}", names);
+    // eprintln!("[DEBUG] open workspace names: {:?}", names);
     names
 }
 
@@ -436,7 +436,7 @@ fn get_active_workspace_name() -> Option<String> {
         let len = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
         if len > 0 {
             let title = String::from_utf16_lossy(&buf[..len as usize]);
-            eprintln!("[DEBUG] Foreground window: \"{}\"", title);
+            // eprintln!("[DEBUG] Foreground window: \"{}\"", title);
             extract_ws_name_from_title(&title)
         } else {
             None
@@ -718,7 +718,7 @@ fn focus_workspace(name: String) -> Result<(), String> {
     {
         // Build the VS Code title pattern: "WorkspaceName (Workspace) - Visual Studio Code"
         let title_pattern = format!("{} (Workspace) - Visual Studio Code", name);
-        eprintln!("[DEBUG] focus_workspace looking for: \"{}\"", title_pattern);
+        // eprintln!("[DEBUG] focus_workspace looking for: \"{}\"", title_pattern);
 
         unsafe {
             let hwnd = find_window_by_title(&title_pattern);
@@ -804,7 +804,7 @@ fn start_workspace_monitor(app: tauri::AppHandle) {
         eprintln!("[DEBUG] start_workspace_monitor: already running, skipping");
         return;
     }
-    eprintln!("[DEBUG] start_workspace_monitor called");
+    // eprintln!("[DEBUG] start_workspace_monitor called");
     std::thread::spawn(move || {
         let mut last_payload: Option<MonitorPayload> = None;
         while MONITOR_RUNNING.load(Ordering::SeqCst) {
@@ -822,24 +822,24 @@ fn start_workspace_monitor(app: tauri::AppHandle) {
                 Some(p) => p.open_names != payload.open_names || p.active_name != payload.active_name,
                 None => true,
             };
-            eprintln!("[DEBUG] monitor tick: open={:?}, active={:?}", payload.open_names, payload.active_name);
+            // eprintln!("[DEBUG] monitor tick: open={:?}, active={:?}", payload.open_names, payload.active_name);
             if changed {
-                eprintln!("[DEBUG] emitting workspace-changed: {:?}", payload);
+                // eprintln!("[DEBUG] emitting workspace-changed: {:?}", payload);
                 match app.emit("workspace-changed", &payload) {
-                    Ok(_) => eprintln!("[DEBUG] emit OK"),
+                    Ok(_) => {} // eprintln!("[DEBUG] emit OK")
                     Err(e) => eprintln!("[DEBUG] emit ERROR: {}", e),
                 }
                 last_payload = Some(payload);
             }
         }
-        eprintln!("[DEBUG] monitor thread exiting");
+        // eprintln!("[DEBUG] monitor thread exiting");
     });
 }
 
 /// Stop the background workspace monitor
 #[tauri::command]
 fn stop_workspace_monitor() {
-    eprintln!("[DEBUG] stop_workspace_monitor called");
+    // eprintln!("[DEBUG] stop_workspace_monitor called");
     MONITOR_RUNNING.store(false, Ordering::SeqCst);
 }
 

@@ -167,19 +167,19 @@ onMounted(async () => {
   }
 
   // Start background monitor (Win32 API, event-driven)
-  console.log("[DEBUG] calling start_workspace_monitor");
+  // console.log("[DEBUG] calling start_workspace_monitor");
   await invoke("start_workspace_monitor");
-  console.log("[DEBUG] start_workspace_monitor returned, setting up listener");
+  // console.log("[DEBUG] start_workspace_monitor returned, setting up listener");
   unlistenWs = await listen<{ open_names: string[]; active_name: string | null }>("workspace-changed", (event) => {
     const { open_names, active_name } = event.payload;
-    console.log("[DEBUG] workspace-changed received:", JSON.stringify(event.payload));
+    // console.log("[DEBUG] workspace-changed received:", JSON.stringify(event.payload));
     debugOpenNames.value = open_names;
     debugActiveName.value = active_name;
     workspaces.value.forEach((ws) => {
       ws.is_open = open_names.includes(ws.name);
     });
   });
-  console.log("[DEBUG] listener set up");
+  // console.log("[DEBUG] listener set up");
 });
 
 onUnmounted(() => {
@@ -199,11 +199,7 @@ onUnmounted(() => {
 
     <UpdateBanner />
 
-    <!-- DEBUG: mostra raw open names e active -->
-    <div style="background:#330;color:#ff0;padding:4px 12px;font-size:11px;font-family:monospace" v-if="debugOpenNames.length >= 0">
-      DEBUG openNames: [{{ debugOpenNames.join(', ') }}] | active: {{ debugActiveName || 'none' }} | computed: {{ activeWorkspace?.name || 'none' }}
-    </div>
-
+    <!-- DEBUG banner rimosso -->
     <!-- Toolbar -->
     <div class="toolbar">
       <button
