@@ -104,6 +104,8 @@ async function launchWorkspace(path: string) {
 async function focusWorkspace(name: string) {
   try {
     await invoke("focus_workspace", { name });
+    // Force update: backend confirmed focus, skip waiting for monitor poll
+    debugActiveName.value = name;
   } catch (e) {
     statusMessage.value = `Focus error: ${e}`;
   }
@@ -269,7 +271,7 @@ onUnmounted(() => {
         :key="ws.path"
         class="ws-card"
         :class="{ 'ws-open': ws.is_open, 'ws-active': ws.is_open && ws.name === activeWorkspace?.name }"
-        @click="ws.is_open ? focusWorkspace(ws.name) : launchWorkspace(ws.path)"
+        @click="ws.is_open && focusWorkspace(ws.name)"
       >
         <div class="ws-traffic-light" :class="{ open: ws.is_open, active: ws.is_open && ws.name === activeWorkspace?.name }">
           <span v-if="ws.is_open" class="dot" :class="{ active: ws.name === activeWorkspace?.name }"></span>

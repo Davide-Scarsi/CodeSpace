@@ -13,28 +13,6 @@
     }
   ],
   "settings": {
-    "sarif-viewer.connectToGithubCodeScanning": "off",
-    "workbench.colorCustomizations": {
-      "activityBar.activeBackground": "#00bcd4",
-      "activityBar.background": "#00bcd4",
-      "activityBar.foreground": "#ffffff",
-      "activityBar.inactiveForeground": "#ffffff99",
-      "activityBarBadge.background": "#00bcd4",
-      "activityBarBadge.foreground": "#ffffff",
-      "commandCenter.border": "#ffffff99",
-      "commandCenter.foreground": "#ffffff",
-      "sash.hoverBorder": "#00bcd4",
-      "statusBar.background": "#00bcd4",
-      "statusBar.debuggingBackground": "#00bcd4",
-      "statusBar.debuggingForeground": "#ffffff",
-      "statusBar.foreground": "#ffffff",
-      "statusBarItem.hoverBackground": "#001919",
-      "statusBarItem.remoteBackground": "#00bcd4",
-      "statusBarItem.remoteForeground": "#ffffff",
-      "titleBar.activeBackground": "#00bcd4",
-      "titleBar.activeForeground": "#ffffff",
-      "titleBar.inactiveBackground": "#00bcd499",
-      "titleBar.inactiveForeground": "#ffffff99"
-    }
+    "sarif-viewer.connectToGithubCodeScanning": "off"
   }
 }

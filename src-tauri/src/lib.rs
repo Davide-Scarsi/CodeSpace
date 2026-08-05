@@ -486,15 +486,36 @@ fn scan_workspaces(app: tauri::AppHandle, force_full: bool) -> Vec<WorkspaceInfo
 
 #[tauri::command]
 fn launch_workspace(path: String) -> Result<(), String> {
-    // Use Windows shell "start" to open .code-workspace with associated program
-    let result = Command::new("cmd")
-        .args(["/c", "start", "", &path])
-        .spawn();
+    // Extract workspace name from path for later window lookup
+    let ws_name = Path::new(&path)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let title_pattern = format!("{} (Workspace) - Visual Studio Code", ws_name);
 
-    match result {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("Failed to launch: {}", e)),
+    // Use Windows shell "start" to open .code-workspace with associated program
+    Command::new("cmd")
+        .args(["/c", "start", "", &path])
+        .spawn()
+        .map_err(|e| format!("Failed to launch: {}", e))?;
+
+    // Poll for the VS Code window to appear (up to ~10 seconds)
+    #[cfg(windows)]
+    {
+        for _ in 0..100 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            unsafe {
+                let hwnd = find_window_by_title(&title_pattern);
+                if hwnd != 0 {
+                    // Maximize the window: SW_MAXIMIZE = 3
+                    ShowWindow(hwnd, 3);
+                    SetForegroundWindow(hwnd);
+                    return Ok(());
+                }
+            }
+        }
     }
+    Ok(())
 }
 
 #[tauri::command]
@@ -716,21 +737,19 @@ async fn download_and_install(url: String) -> Result<(), String> {
 fn focus_workspace(name: String) -> Result<(), String> {
     #[cfg(windows)]
     {
-        // Build the VS Code title pattern: "WorkspaceName (Workspace) - Visual Studio Code"
         let title_pattern = format!("{} (Workspace) - Visual Studio Code", name);
-        // eprintln!("[DEBUG] focus_workspace looking for: \"{}\"", title_pattern);
 
         unsafe {
-            let hwnd = find_window_by_title(&title_pattern);
-            if hwnd == 0 {
+            // Find target window
+            let target = find_window_by_title(&title_pattern);
+            if target == 0 {
                 return Err(format!("Window not found for: {}", name));
             }
-            // Bring to foreground
-            if SetForegroundWindow(hwnd) == 0 {
-                return Err("Failed to bring window to foreground".into());
-            }
-            // Restore if minimized
-            ShowWindow(hwnd, 9); // SW_RESTORE
+
+            // Minimize others FIRST, then maximize & focus target
+            minimize_other_vscode_windows(target);
+            ShowWindow(target, 3); // SW_MAXIMIZE
+            SetForegroundWindow(target);
         }
         Ok(())
     }
@@ -738,6 +757,36 @@ fn focus_workspace(name: String) -> Result<(), String> {
     {
         Err("focus_workspace is only supported on Windows".into())
     }
+}
+
+/// Minimize all visible VS Code windows except the given hwnd.
+#[cfg(windows)]
+unsafe fn minimize_other_vscode_windows(exclude: isize) {
+    struct Ctx {
+        exclude: isize,
+    }
+
+    unsafe extern "system" fn enum_cb(hwnd: isize, lparam: isize) -> i32 {
+        let ctx = &*(lparam as *const Ctx);
+        if hwnd == ctx.exclude {
+            return 1;
+        }
+        if IsWindowVisible(hwnd) == 0 {
+            return 1;
+        }
+        let mut buf = [0u16; 512];
+        let len = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+        if len > 0 {
+            let title = String::from_utf16_lossy(&buf[..len as usize]);
+            if title.contains("Visual Studio Code") {
+                ShowWindow(hwnd, 6); // SW_MINIMIZE
+            }
+        }
+        1
+    }
+
+    let ctx = Ctx { exclude };
+    EnumWindows(enum_cb, &ctx as *const Ctx as isize);
 }
 
 #[cfg(windows)]
