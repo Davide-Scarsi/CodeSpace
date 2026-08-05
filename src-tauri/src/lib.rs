@@ -759,6 +759,26 @@ fn focus_workspace(name: String) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+fn minimize_workspace(name: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let title_pattern = format!("{} (Workspace) - Visual Studio Code", name);
+        unsafe {
+            let hwnd = find_window_by_title(&title_pattern);
+            if hwnd == 0 {
+                return Err(format!("Window not found for: {}", name));
+            }
+            ShowWindow(hwnd, 6); // SW_MINIMIZE
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        Err("minimize_workspace is only supported on Windows".into())
+    }
+}
+
 /// Minimize all visible VS Code windows except the given hwnd.
 #[cfg(windows)]
 unsafe fn minimize_other_vscode_windows(exclude: isize) {
@@ -951,6 +971,7 @@ pub fn run() {
             stop_workspace_monitor,
             get_scan_info,
             focus_workspace,
+            minimize_workspace,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

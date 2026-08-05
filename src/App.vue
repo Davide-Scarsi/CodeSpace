@@ -111,6 +111,25 @@ async function focusWorkspace(name: string) {
   }
 }
 
+async function minimizeWorkspace(name: string) {
+  try {
+    await invoke("minimize_workspace", { name });
+    // Signal explicit clear — activeWorkspace will return null
+    debugActiveName.value = "";
+  } catch (e) {
+    statusMessage.value = `Minimize error: ${e}`;
+  }
+}
+
+function handleRowClick(ws: WorkspaceInfo) {
+  if (!ws.is_open) return;
+  if (ws.name === activeWorkspace.value?.name) {
+    minimizeWorkspace(ws.name);
+  } else {
+    focusWorkspace(ws.name);
+  }
+}
+
 // ── Color Modal ─────────────────────────────────────────
 const modalWs = ref<WorkspaceInfo | null>(null);
 
@@ -150,11 +169,13 @@ async function pickColor(color: string) {
 
 // ── Lifecycle ────────────────────────────────────────────
 const activeWorkspace = computed(() => {
+  // Empty string = user explicitly cleared via minimizeWorkspace
+  if (debugActiveName.value === "") return null;
   if (debugActiveName.value) {
     return workspaces.value.find(w => w.name === debugActiveName.value) || null;
   }
-  // Fallback: first open workspace
-  return workspaces.value.find(w => w.is_open) || null;
+  // No active workspace (all minimized, desktop, or initial state)
+  return null;
 });
 
 let unlistenWs: (() => void) | null = null;
@@ -174,13 +195,14 @@ onMounted(async () => {
   // console.log("[DEBUG] start_workspace_monitor returned, setting up listener");
   unlistenWs = await listen<{ open_names: string[]; active_name: string | null }>("workspace-changed", (event) => {
     const { open_names, active_name } = event.payload;
-    // console.log("[DEBUG] workspace-changed received:", JSON.stringify(event.payload));
     debugOpenNames.value = open_names;
-    // Keep last known active workspace when none has focus
+    // Keep last active when CodeSpace has focus (scrolling etc.)
     if (active_name !== null) {
       debugActiveName.value = active_name;
+    } else if (debugActiveName.value === "") {
+      // User explicitly minimized — keep empty (no selection)
     } else if (debugActiveName.value && !open_names.includes(debugActiveName.value)) {
-      // Last active workspace was closed — clear it so fallback picks another open one
+      // Last active was closed — clear
       debugActiveName.value = null;
     }
     workspaces.value.forEach((ws) => {
@@ -271,7 +293,7 @@ onUnmounted(() => {
         :key="ws.path"
         class="ws-card"
         :class="{ 'ws-open': ws.is_open, 'ws-active': ws.is_open && ws.name === activeWorkspace?.name }"
-        @click="ws.is_open && focusWorkspace(ws.name)"
+        @click="handleRowClick(ws)"
       >
         <div class="ws-traffic-light" :class="{ open: ws.is_open, active: ws.is_open && ws.name === activeWorkspace?.name }">
           <span v-if="ws.is_open" class="dot" :class="{ active: ws.name === activeWorkspace?.name }"></span>
