@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import VscodeIcon from "./components/VscodeIcon.vue";
 import UpdateBanner from "./components/UpdateBanner.vue";
+import { useWorkspaceFlip } from "./utils/useWorkspaceFlip";
 
 declare const __APP_VERSION__: string;
 const appVersion = __APP_VERSION__;
@@ -64,6 +65,23 @@ const filteredWorkspaces = computed(() => {
       ws.name.toLowerCase().includes(q) ||
       ws.display_path.toLowerCase().includes(q)
   );
+});
+
+const sortedWorkspaces = computed(() => {
+  const sorted = [...filteredWorkspaces.value];
+  sorted.sort((a, b) => {
+    // Active workspace first
+    const aActive = a.is_open && a.name === activeWorkspace.value?.name ? 0 : 1;
+    const bActive = b.is_open && b.name === activeWorkspace.value?.name ? 0 : 1;
+    if (aActive !== bActive) return aActive - bActive;
+    // Open workspaces next
+    const aOpen = a.is_open ? 1 : 2;
+    const bOpen = b.is_open ? 1 : 2;
+    if (aOpen !== bOpen) return aOpen - bOpen;
+    // Alphabetical within same group
+    return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+  });
+  return sorted;
 });
 
 const lastScanDate = computed(() => {
@@ -166,6 +184,10 @@ async function pickColor(color: string) {
   }
   closeColorModal();
 }
+
+// ── FLIP animation for workspace reordering ──────────────
+const listRef = ref<HTMLElement | null>(null);
+useWorkspaceFlip(listRef);
 
 // ── Lifecycle ────────────────────────────────────────────
 const activeWorkspace = computed(() => {
@@ -281,6 +303,7 @@ onUnmounted(() => {
     <!-- Workspace List -->
     <div
       class="list-container"
+      ref="listRef"
       :class="{ 'drag-over': dragOver }"
     >
       <div v-if="workspaces.length === 0 && !scanning" class="empty-state">
@@ -289,9 +312,10 @@ onUnmounted(() => {
       </div>
 
       <div
-        v-for="ws in filteredWorkspaces"
+        v-for="ws in sortedWorkspaces"
         :key="ws.path"
         class="ws-card"
+        :data-ws-name="ws.name"
         :class="{ 'ws-open': ws.is_open, 'ws-active': ws.is_open && ws.name === activeWorkspace?.name }"
         @click="handleRowClick(ws)"
       >
@@ -590,6 +614,8 @@ body {
   border-radius: 6px;
   border: 1px solid transparent;
   cursor: pointer;
+  background: #0d1117;
+  will-change: transform;
 }
 
 .ws-card:hover {
