@@ -7,7 +7,7 @@ const updateAssetId = ref("");
 const downloading = ref(false);
 const error = ref("");
 
-const CURRENT = "1.0.4";
+const CURRENT = "1.0.5";
 
 onMounted(async () => {
   try {
