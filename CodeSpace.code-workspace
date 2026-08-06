@@ -10,9 +10,35 @@
     {
       "name": "CodeSpace",
       "path": "."
+    },
+    {
+      "name": "prompts",
+      "path": "C:\\Users\\d.scarsi\\AppData\\Roaming\\Code\\User\\prompts"
     }
   ],
   "settings": {
-    "sarif-viewer.connectToGithubCodeScanning": "off"
+    "sarif-viewer.connectToGithubCodeScanning": "off",
+    "workbench.colorCustomizations": {
+      "activityBar.activeBackground": "#3f51b5",
+      "activityBar.background": "#3f51b5",
+      "activityBar.foreground": "#ffffff",
+      "activityBar.inactiveForeground": "#ffffff99",
+      "activityBarBadge.background": "#3f51b5",
+      "activityBarBadge.foreground": "#ffffff",
+      "commandCenter.border": "#ffffff99",
+      "commandCenter.foreground": "#ffffff",
+      "sash.hoverBorder": "#3f51b5",
+      "statusBar.background": "#3f51b5",
+      "statusBar.debuggingBackground": "#3f51b5",
+      "statusBar.debuggingForeground": "#ffffff",
+      "statusBar.foreground": "#ffffff",
+      "statusBarItem.hoverBackground": "#191919",
+      "statusBarItem.remoteBackground": "#3f51b5",
+      "statusBarItem.remoteForeground": "#ffffff",
+      "titleBar.activeBackground": "#3f51b5",
+      "titleBar.activeForeground": "#ffffff",
+      "titleBar.inactiveBackground": "#3f51b599",
+      "titleBar.inactiveForeground": "#ffffff99"
+    }
   }
 }

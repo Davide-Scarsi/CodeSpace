@@ -485,13 +485,11 @@ fn scan_workspaces(app: tauri::AppHandle, force_full: bool) -> Vec<WorkspaceInfo
 }
 
 #[tauri::command]
-fn launch_workspace(path: String) -> Result<(), String> {
-    // Extract workspace name from path for later window lookup
+fn launch_workspace(app: tauri::AppHandle, path: String) -> Result<(), String> {
     let ws_name = Path::new(&path)
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
-    let title_pattern = format!("{} (Workspace) - Visual Studio Code", ws_name);
 
     // Use Windows shell "start" to open .code-workspace with associated program
     Command::new("cmd")
@@ -499,22 +497,30 @@ fn launch_workspace(path: String) -> Result<(), String> {
         .spawn()
         .map_err(|e| format!("Failed to launch: {}", e))?;
 
-    // Poll for the VS Code window to appear (up to ~10 seconds)
+    // Spawn background thread to poll for the VS Code window (non-blocking)
     #[cfg(windows)]
     {
-        for _ in 0..100 {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            unsafe {
-                let hwnd = find_window_by_title(&title_pattern);
-                if hwnd != 0 {
-                    // Maximize the window: SW_MAXIMIZE = 3
-                    ShowWindow(hwnd, 3);
-                    SetForegroundWindow(hwnd);
-                    return Ok(());
+        let title_pattern = format!("{} (Workspace) - Visual Studio Code", ws_name);
+        let ws_name_clone = ws_name.clone();
+        std::thread::spawn(move || {
+            for _ in 0..150 {
+                // 15 seconds (150 * 100ms)
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                unsafe {
+                    let hwnd = find_window_by_title(&title_pattern);
+                    if hwnd != 0 {
+                        ShowWindow(hwnd, 3); // SW_MAXIMIZE
+                        SetForegroundWindow(hwnd);
+                        let _ = app.emit("workspace-launched", &ws_name_clone);
+                        return;
+                    }
                 }
             }
-        }
+            // Timeout
+            let _ = app.emit("workspace-launch-failed", &ws_name_clone);
+        });
     }
+
     Ok(())
 }
 

@@ -110,11 +110,14 @@ async function scan(forceFull: boolean) {
   }
 }
 
-async function launchWorkspace(path: string) {
+const launching = ref<Record<string, boolean>>({});
+
+async function launchWorkspace(path: string, wsName: string) {
+  launching.value[wsName] = true;
   try {
     await invoke("launch_workspace", { path });
-    statusMessage.value = `Launched: ${path}`;
   } catch (e) {
+    launching.value[wsName] = false;
     statusMessage.value = `Launch error: ${e}`;
   }
 }
@@ -201,6 +204,8 @@ const activeWorkspace = computed(() => {
 });
 
 let unlistenWs: (() => void) | null = null;
+let unlistenLaunched: (() => void) | null = null;
+let unlistenLaunchFailed: (() => void) | null = null;
 const debugOpenNames = ref<string[]>([]);
 const debugActiveName = ref<string | null>(null);
 
@@ -231,12 +236,28 @@ onMounted(async () => {
       ws.is_open = open_names.includes(ws.name);
     });
   });
+
+  // Listen for workspace-launched event (spinner cleanup)
+  unlistenLaunched = await listen<string>("workspace-launched", (event) => {
+    const wsName = event.payload;
+    launching.value[wsName] = false;
+    statusMessage.value = `Launched: ${wsName}`;
+  });
+
+  // Listen for workspace-launch-failed event (timeout)
+  unlistenLaunchFailed = await listen<string>("workspace-launch-failed", (event) => {
+    const wsName = event.payload;
+    launching.value[wsName] = false;
+    statusMessage.value = `Launch timeout: ${wsName}`;
+  });
   // console.log("[DEBUG] listener set up");
 });
 
 onUnmounted(() => {
   if (unlisten) unlisten();
   if (unlistenWs) unlistenWs();
+  if (unlistenLaunched) unlistenLaunched();
+  if (unlistenLaunchFailed) unlistenLaunchFailed();
   invoke("stop_workspace_monitor").catch(() => {});
 });
 </script>
@@ -316,7 +337,7 @@ onUnmounted(() => {
         :key="ws.path"
         class="ws-card"
         :data-ws-name="ws.name"
-        :class="{ 'ws-open': ws.is_open, 'ws-active': ws.is_open && ws.name === activeWorkspace?.name }"
+        :class="{ 'ws-open': ws.is_open, 'ws-active': ws.is_open && ws.name === activeWorkspace?.name, 'ws-launching': launching[ws.name] }"
         @click="handleRowClick(ws)"
       >
         <div class="ws-traffic-light" :class="{ open: ws.is_open, active: ws.is_open && ws.name === activeWorkspace?.name }">
@@ -333,7 +354,15 @@ onUnmounted(() => {
           <button class="ws-btn" title="Peacock color" @click.stop="openColorModal(ws)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
-          <button class="ws-btn ws-btn-launch" title="Open in VS Code" @click.stop="launchWorkspace(ws.path)">
+          <!-- Spinner while launching, launch button otherwise -->
+          <div v-if="launching[ws.name]" class="ws-spinner" title="Opening...">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <path d="M21 12a9 9 0 1 1-6.8-8.7" stroke-dasharray="60" stroke-dashoffset="20">
+                <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/>
+              </path>
+            </svg>
+          </div>
+          <button v-else class="ws-btn ws-btn-launch" title="Open in VS Code" @click.stop="launchWorkspace(ws.path, ws.name)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           </button>
         </div>
@@ -715,6 +744,10 @@ body {
   opacity: 1;
 }
 
+.ws-card.ws-launching .ws-actions {
+  opacity: 1;
+}
+
 .ws-btn {
   display: flex;
   align-items: center;
@@ -738,6 +771,16 @@ body {
 .ws-btn-launch:hover {
   color: #58a6ff;
   border-color: #1f6feb;
+}
+
+.ws-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: #58a6ff;
 }
 
 /* ── Active workspace banner ──────────────────────────── */
