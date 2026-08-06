@@ -39,7 +39,7 @@ pub struct TaskInfo {
     pub command: String,
     pub args: Vec<String>,
     pub cwd: Option<String>,
-    pub icon: Option<String>,
+    pub icon: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -50,8 +50,26 @@ struct VsCodeTask {
     command: Option<String>,
     args: Option<Vec<String>>,
     options: Option<TaskOptions>,
-    /// Custom SVG path for CodeSpace task runner (Lucide-style 24x24 path)
-    icon: Option<String>,
+    #[serde(rename = "codeSpace")]
+    code_space: Option<CodeSpaceSettings>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CodeSpaceSettings {
+    #[serde(rename = "taskType")]
+    task_type: Option<String>,
+}
+
+/// Icon mapping: task-type → Lucide SVG path (24x24 viewBox, stroke-based)
+fn get_task_icon(task_type: &str) -> &str {
+    match task_type {
+        "live-server" => "M6.34277267,4.93867691 C6.73329697,5.3292012 6.73329697,5.96236618 6.34277267,6.35289047 C3.21757171,9.47809143 3.21757171,14.5450433 6.34277267,17.6702443 C6.73329697,18.0607686 6.73329697,18.6939336 6.34277267,19.0844579 C5.95224838,19.4749821 5.3190834,19.4749821 4.92855911,19.0844579 C1.02230957,15.1782083 1.02230957,8.84492646 4.92855911,4.93867691 C5.3190834,4.54815262 5.95224838,4.54815262 6.34277267,4.93867691 Z M19.0743401,4.93867691 C22.9805896,8.84492646 22.9805896,15.1782083 19.0743401,19.0844579 C18.6838158,19.4749821 18.0506508,19.4749821 17.6601265,19.0844579 C17.2696022,18.6939336 17.2696022,18.0607686 17.6601265,17.6702443 C20.7853275,14.5450433 20.7853275,9.47809143 17.6601265,6.35289047 C17.2696022,5.96236618 17.2696022,5.3292012 17.6601265,4.93867691 C18.0506508,4.54815262 18.6838158,4.54815262 19.0743401,4.93867691 Z M9.3094225,7.81205295 C9.69994679,8.20257725 9.69994679,8.83574222 9.3094225,9.22626652 C7.77845993,10.7572291 7.77845993,13.2394099 9.3094225,14.7703724 C9.69994679,15.1608967 9.69994679,15.7940617 9.3094225,16.184586 C8.91889821,16.5751103 8.28573323,16.5751103 7.89520894,16.184586 C5.58319778,13.8725748 5.58319778,10.1240641 7.89520894,7.81205295 C8.28573323,7.42152866 8.91889821,7.42152866 9.3094225,7.81205295 Z M16.267742,7.81205295 C18.5797531,10.1240641 18.5797531,13.8725748 16.267742,16.184586 C15.8772177,16.5751103 15.2440527,16.5751103 14.8535284,16.184586 C14.4630041,15.7940617 14.4630041,15.1608967 14.8535284,14.7703724 C16.384491,13.2394099 16.384491,10.7572291 14.8535284,9.22626652 C14.4630041,8.83574222 14.4630041,8.20257725 14.8535284,7.81205295 C15.2440527,7.42152866 15.8772177,7.42152866 16.267742,7.81205295 Z M12.0814755,10.5814755 C12.9099026,10.5814755 13.5814755,11.2530483 13.5814755,12.0814755 C13.5814755,12.9099026 12.9099026,13.5814755 12.0814755,13.5814755 C11.2530483,13.5814755 10.5814755,12.9099026 10.5814755,12.0814755 C10.5814755,11.2530483 11.2530483,10.5814755 12.0814755,10.5814755 Z",
+        "php-server" => "M12 2 2 7l10 5 10-5-10-5z M2 17l10 5 10-5 M2 12l10 5 10-5",
+        "npm" => "M12 2l10 5v10l-10 5-10-5V7z M12 22V12 M4 7l8 4 8-4",
+        "echo" => "M4 6h16 M4 12h10 M4 18h8",
+        "powershell" => "M4 17l6-6-6-6 M12 19h8",
+        _ => "M5 3l14 9-14 9V3z", // default: play triangle
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -936,7 +954,8 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
                             }
                         })
                         .or_else(|| Some(root.to_string_lossy().to_string()));
-                    let icon = t.icon;
+                    let task_type = t.code_space.and_then(|cs| cs.task_type).unwrap_or_default();
+                    let icon = get_task_icon(&task_type).to_string();
                     result.push(TaskInfo { label, command: cmd_name, args, cwd, icon });
                 }
             }
@@ -950,8 +969,6 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
 fn run_task(command: String, args: Vec<String>, cwd: Option<String>) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     const CREATE_NEW_CONSOLE: u32 = 0x00000010;
-
-    eprintln!("[DEBUG run_task] cmd={} args={:?} cwd={:?}", command, args, cwd);
 
     if args.is_empty() && command.contains(' ') {
         eprintln!("[DEBUG] using PowerShell (multi-word command)");

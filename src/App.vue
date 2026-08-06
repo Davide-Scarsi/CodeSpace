@@ -24,7 +24,7 @@ interface TaskItem {
   command: string;
   args: string[];
   cwd: string | null;
-  icon: string | null;
+  icon: string;
 }
 
 // ── State ────────────────────────────────────────────────
@@ -449,8 +449,7 @@ onUnmounted(() => {
         @click="runTask(t)"
       >
         <div class="ws-icon">
-          <svg v-if="t.icon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path :d="t.icon"/></svg>
-          <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path :d="t.icon"/></svg>
         </div>
         <div class="ws-info">
           <span class="ws-name">{{ t.label }}</span>
