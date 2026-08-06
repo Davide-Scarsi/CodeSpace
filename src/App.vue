@@ -434,10 +434,7 @@ onUnmounted(() => {
           <VscodeIcon :color="ws.color" :size="28" />
         </div>
         <div class="ws-info">
-          <span class="ws-name">
-            {{ ws.name }}
-            <span v-if="liveTerminals[ws.name]?.length" class="ws-live-badge" title="Live server running">●</span>
-          </span>
+          <span class="ws-name">{{ ws.name }}</span>
           <span class="ws-path">{{ ws.display_path }}</span>
         </div>
         <div class="ws-actions">
@@ -455,6 +452,15 @@ onUnmounted(() => {
           <button v-else class="ws-btn ws-btn-launch" title="Open in VS Code" @click.stop="launchWorkspace(ws.path, ws.name)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           </button>
+        </div>
+        <div
+          v-if="liveTerminals[ws.name]?.length"
+          class="ws-live-btn"
+          :style="{ '--ws-color': ws.color || '#2ea043' }"
+          title="Toggle live server terminal"
+          @click.stop="toggleLiveTerminal(ws.name)"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M6.34 4.94a1 1 0 0 1 0 1.41 8.5 8.5 0 0 0 0 11.32 1 1 0 0 1-1.41 1.41C1.02 15.18 1.02 8.85 4.93 4.94a1 1 0 0 1 1.41 0zm12.73 0c3.9 3.9 3.9 10.24 0 14.14a1 1 0 0 1-1.41-1.41 8.5 8.5 0 0 0 0-11.32 1 1 0 0 1 1.41-1.41zM9.31 7.81a1 1 0 0 1 0 1.42 4.5 4.5 0 0 0 0 5.54 1 1 0 0 1-1.41 1.41 6.5 6.5 0 0 1 0-8.37 1 1 0 0 1 1.41 0zm6.96 0a6.5 6.5 0 0 1 0 8.37 1 1 0 0 1-1.41-1.41 4.5 4.5 0 0 0 0-5.54 1 1 0 0 1 1.41-1.42zM12.08 10.58a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>
         </div>
       </div>
     </div>
@@ -878,39 +884,18 @@ body {
   opacity: 1;
 }
 
-.ws-btn {
+.ws-live-btn {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 30px;
   height: 30px;
-  border: 1px solid transparent;
   border-radius: 6px;
-  background: transparent;
-  color: #8b949e;
+  border: 1px solid color-mix(in srgb, var(--ws-color, #2ea043) 35%, transparent);
+  background: color-mix(in srgb, var(--ws-color, #2ea043) 20%, transparent);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-
-.ws-btn:hover {
-  background: #30363d;
-  color: #c9d1d9;
-  border-color: #484f58;
-}
-
-.ws-btn-launch:hover {
-  color: #58a6ff;
-  border-color: #1f6feb;
-}
-
-.ws-spinner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  color: #58a6ff;
+  animation: live-bg-pulse 2s ease-in-out infinite;
 }
 
 /* ── Active workspace banner ──────────────────────────── */
@@ -977,17 +962,45 @@ body {
   animation: live-pulse 2s ease-in-out infinite;
 }
 
-@keyframes live-pulse {
-  0%, 100% { box-shadow: 0 0 6px rgba(46,160,67,0.4); }
-  50% { box-shadow: 0 0 14px rgba(46,160,67,0.7); }
+.ws-live-btn {
+  background: color-mix(in srgb, var(--ws-color, #2ea043) 20%, transparent);
+  border-color: color-mix(in srgb, var(--ws-color, #2ea043) 35%, transparent);
+  animation: live-bg-pulse 2s ease-in-out infinite;
 }
 
-.ws-live-badge {
-  color: #2ea043;
-  font-size: 8px;
-  vertical-align: middle;
-  margin-left: 4px;
-  animation: live-pulse 2s ease-in-out infinite;
+.ws-live-btn:hover {
+  background: color-mix(in srgb, var(--ws-color, #2ea043) 35%, transparent) !important;
+  border-color: var(--ws-color, #2ea043) !important;
+}
+
+.ws-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #8b949e;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.ws-btn:hover {
+  background: #30363d;
+  color: #c9d1d9;
+  border-color: #484f58;
+}
+
+.ws-btn-launch:hover {
+  color: #58a6ff;
+  border-color: #1f6feb;
+}
+
+@keyframes live-bg-pulse {
+  0%, 100% { background: color-mix(in srgb, var(--ws-color, #2ea043) 20%, transparent); }
+  50% { background: color-mix(in srgb, var(--ws-color, #2ea043) 35%, transparent); }
 }
 
 /* ── Drop zone ────────────────────────────────────────── */
