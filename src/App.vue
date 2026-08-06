@@ -25,6 +25,7 @@ interface TaskItem {
   args: string[];
   cwd: string | null;
   icon: string;
+  task_type: string;
 }
 
 // ── State ────────────────────────────────────────────────
@@ -212,8 +213,9 @@ async function toggleTaskView(ws: WorkspaceInfo) {
 }
 
 async function runTask(task: TaskItem) {
+  const ws = activeWorkspace.value;
   try {
-    await invoke("run_task", { command: task.command, args: task.args, cwd: task.cwd });
+    await invoke("run_task", { command: task.command, args: task.args, cwd: task.cwd, taskType: task.task_type, workspaceName: ws?.name || "" });
     statusMessage.value = `Running: ${task.label}`;
   } catch (e) {
     statusMessage.value = `Error: ${e}`;
@@ -266,6 +268,14 @@ let unlistenLaunched: (() => void) | null = null;
 let unlistenLaunchFailed: (() => void) | null = null;
 const debugOpenNames = ref<string[]>([]);
 const debugActiveName = ref<string | null>(null);
+const liveTerminals = ref<Record<string, number[]>>({});
+
+async function toggleLiveTerminal(wsName: string) {
+  const hwnds = liveTerminals.value[wsName];
+  if (hwnds && hwnds.length > 0) {
+    await invoke("toggle_live_terminal", { hwnds });
+  }
+}
 
 onMounted(async () => {
   setupDragDrop();
@@ -278,8 +288,8 @@ onMounted(async () => {
   // console.log("[DEBUG] calling start_workspace_monitor");
   await invoke("start_workspace_monitor");
   // console.log("[DEBUG] start_workspace_monitor returned, setting up listener");
-  unlistenWs = await listen<{ open_names: string[]; active_name: string | null }>("workspace-changed", (event) => {
-    const { open_names, active_name } = event.payload;
+  unlistenWs = await listen<{ open_names: string[]; active_name: string | null; live_terminals: Record<string, number[]> }>("workspace-changed", (event) => {
+    const { open_names, active_name, live_terminals } = event.payload;
     debugOpenNames.value = open_names;
     // Keep last active when CodeSpace has focus (scrolling etc.)
     if (active_name !== null) {
@@ -293,6 +303,7 @@ onMounted(async () => {
     workspaces.value.forEach((ws) => {
       ws.is_open = open_names.includes(ws.name);
     });
+    liveTerminals.value = live_terminals;
     // Close task view if user switched to a different workspace
     if (taskView.value && active_name !== null && taskViewWsName.value !== active_name) {
       taskView.value = false;
@@ -380,6 +391,14 @@ onUnmounted(() => {
 
     <!-- Active workspace banner -->
     <div v-if="activeWorkspace" class="active-banner" :style="{ '--ws-color': activeWorkspace.color || '#0078d4' }">
+      <button
+        v-if="liveTerminals[activeWorkspace.name]?.length"
+        class="banner-live-icon"
+        title="Toggle live server terminal"
+        @click="toggleLiveTerminal(activeWorkspace.name)"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6.34 4.94a1 1 0 0 1 0 1.41 8.5 8.5 0 0 0 0 11.32 1 1 0 0 1-1.41 1.41C1.02 15.18 1.02 8.85 4.93 4.94a1 1 0 0 1 1.41 0zm12.73 0c3.9 3.9 3.9 10.24 0 14.14a1 1 0 0 1-1.41-1.41 8.5 8.5 0 0 0 0-11.32 1 1 0 0 1 1.41-1.41zM9.31 7.81a1 1 0 0 1 0 1.42 4.5 4.5 0 0 0 0 5.54 1 1 0 0 1-1.41 1.41 6.5 6.5 0 0 1 0-8.37 1 1 0 0 1 1.41 0zm6.96 0a6.5 6.5 0 0 1 0 8.37 1 1 0 0 1-1.41-1.41 4.5 4.5 0 0 0 0-5.54 1 1 0 0 1 1.41-1.42zM12.08 10.58a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>
+      </button>
       <span class="active-name">{{ activeWorkspace.name }}</span>
       <span class="active-path">{{ activeWorkspace.display_path }}</span>
       <button class="banner-task-btn" :title="taskView ? 'Back to workspaces' : 'Run tasks'" @click="toggleTaskView(activeWorkspace)">
@@ -415,7 +434,10 @@ onUnmounted(() => {
           <VscodeIcon :color="ws.color" :size="28" />
         </div>
         <div class="ws-info">
-          <span class="ws-name">{{ ws.name }}</span>
+          <span class="ws-name">
+            {{ ws.name }}
+            <span v-if="liveTerminals[ws.name]?.length" class="ws-live-badge" title="Live server running">●</span>
+          </span>
           <span class="ws-path">{{ ws.display_path }}</span>
         </div>
         <div class="ws-actions">
@@ -937,6 +959,35 @@ body {
   background: rgba(255,255,255,0.2);
   border-color: rgba(255,255,255,0.4);
   color: #fff;
+}
+
+.banner-live-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+  cursor: pointer;
+  margin-right: 12px;
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(46,160,67,0.4); }
+  50% { box-shadow: 0 0 14px rgba(46,160,67,0.7); }
+}
+
+.ws-live-badge {
+  color: #2ea043;
+  font-size: 8px;
+  vertical-align: middle;
+  margin-left: 4px;
+  animation: live-pulse 2s ease-in-out infinite;
 }
 
 /* ── Drop zone ────────────────────────────────────────── */

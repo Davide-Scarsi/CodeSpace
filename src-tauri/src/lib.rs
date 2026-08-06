@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::SystemTime;
 use tauri::Emitter;
 use tauri::Manager;
@@ -40,6 +41,7 @@ pub struct TaskInfo {
     pub args: Vec<String>,
     pub cwd: Option<String>,
     pub icon: String,
+    pub task_type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -437,9 +439,11 @@ extern "system" {
     fn EnumWindows(cb: unsafe extern "system" fn(hwnd: isize, lparam: isize) -> i32, lparam: isize) -> i32;
     fn GetWindowTextW(hwnd: isize, buf: *mut u16, max: i32) -> i32;
     fn IsWindowVisible(hwnd: isize) -> i32;
+    fn IsWindow(hwnd: isize) -> i32;
     fn GetForegroundWindow() -> isize;
     fn SetForegroundWindow(hwnd: isize) -> i32;
     fn ShowWindow(hwnd: isize, cmd: i32) -> i32;
+    fn IsIconic(hwnd: isize) -> i32;
     fn FindWindowW(class: *const u16, title: *const u16) -> isize;
     fn GetWindowRect(hwnd: isize, rect: *mut Rect) -> i32;
     fn SetWindowPos(hwnd: isize, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
@@ -812,10 +816,21 @@ fn check_open_status(paths: Vec<String>) -> Vec<bool> {
 struct MonitorPayload {
     open_names: Vec<String>,
     active_name: Option<String>,
+    live_terminals: HashMap<String, Vec<isize>>,
 }
 
 /// Shared flag to signal the background monitor to stop
 static MONITOR_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Tracks live-server terminal windows: workspace_name -> Vec<HWND>
+static LIVE_TERMINALS: Mutex<Option<HashMap<String, Vec<isize>>>> = Mutex::new(None);
+
+fn init_live_terminals() {
+    let mut guard = LIVE_TERMINALS.lock().unwrap();
+    if guard.is_none() {
+        *guard = Some(HashMap::new());
+    }
+}
 
 /// Spawns a background thread that monitors VS Code windows via Win32 API.
 /// Emits "workspace-changed" events with the list of open workspace names
@@ -836,12 +851,26 @@ fn start_workspace_monitor(app: tauri::AppHandle) {
             }
             let names = get_open_workspace_names();
             let active = get_active_workspace_name();
+
+            // Clean dead terminal HWNDs
+            init_live_terminals();
+            let mut terminals = LIVE_TERMINALS.lock().unwrap();
+            let term_map = terminals.as_mut().unwrap();
+            for hwnds in term_map.values_mut() {
+                #[cfg(windows)]
+                hwnds.retain(|&h| unsafe { IsWindow(h) != 0 });
+            }
+            term_map.retain(|_, hwnds| !hwnds.is_empty());
+            let live_terms = term_map.clone();
+            drop(terminals);
+
             let payload = MonitorPayload {
                 open_names: names,
                 active_name: active,
+                live_terminals: live_terms,
             };
             let changed = match &last_payload {
-                Some(p) => p.open_names != payload.open_names || p.active_name != payload.active_name,
+                Some(p) => p.open_names != payload.open_names || p.active_name != payload.active_name || p.live_terminals != payload.live_terminals,
                 None => true,
             };
             // eprintln!("[DEBUG] monitor tick: open={:?}, active={:?}", payload.open_names, payload.active_name);
@@ -863,6 +892,26 @@ fn start_workspace_monitor(app: tauri::AppHandle) {
 fn stop_workspace_monitor() {
     // eprintln!("[DEBUG] stop_workspace_monitor called");
     MONITOR_RUNNING.store(false, Ordering::SeqCst);
+}
+
+/// Toggle a live-server terminal window (minimize/restore)
+#[tauri::command]
+fn toggle_live_terminal(hwnds: Vec<isize>) -> Result<(), String> {
+    #[cfg(windows)]
+    unsafe {
+        for &h in &hwnds {
+            if IsWindow(h) != 0 {
+                if IsIconic(h) != 0 {
+                    ShowWindow(h, 9);
+                } else {
+                    ShowWindow(h, 6);
+                }
+                SetForegroundWindow(h);
+            }
+        }
+    }
+    let _ = hwnds;
+    Ok(())
 }
 
 #[tauri::command]
@@ -963,7 +1012,7 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
                         .or_else(|| Some(root.to_string_lossy().to_string()));
                     let task_type = t.code_space.and_then(|cs| cs.task_type).unwrap_or_default();
                     let icon = get_task_icon(&task_type).to_string();
-                    result.push(TaskInfo { label, command: cmd_name, args, cwd, icon });
+                    result.push(TaskInfo { label, command: cmd_name, args, cwd, icon, task_type });
                 }
             }
         }
@@ -973,7 +1022,7 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
 }
 
 #[tauri::command]
-fn run_task(command: String, args: Vec<String>, cwd: Option<String>) -> Result<(), String> {
+fn run_task(command: String, args: Vec<String>, cwd: Option<String>, task_type: String, workspace_name: String) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     const CREATE_NEW_CONSOLE: u32 = 0x00000010;
 
@@ -982,6 +1031,8 @@ fn run_task(command: String, args: Vec<String>, cwd: Option<String>) -> Result<(
     let mut cs_rect = Rect { left: 0, top: 0, right: 800, bottom: 600 };
     unsafe { GetWindowRect(cs_hwnd, &mut cs_rect); }
 
+    let task_type_clone = task_type.clone();
+    let workspace_name_clone = workspace_name.clone();
     let spawn = move || -> Result<(), String> {
         if args.is_empty() && command.contains(' ') {
             let mut ps = Command::new("powershell");
@@ -1011,7 +1062,7 @@ fn run_task(command: String, args: Vec<String>, cwd: Option<String>) -> Result<(
 
     // In background, find the new console window and position it to the right
     std::thread::spawn(move || {
-        for _ in 0..40 { // 40 * 150ms = 6 seconds
+        for i in 0..40 { // 40 * 150ms = 6 seconds
             std::thread::sleep(std::time::Duration::from_millis(150));
             unsafe {
                 let hwnd = GetForegroundWindow();
@@ -1024,8 +1075,13 @@ fn run_task(command: String, args: Vec<String>, cwd: Option<String>) -> Result<(
                         let cs_w = cs_rect.right - cs_rect.left;
                         let cs_h = cs_rect.bottom - cs_rect.top;
                         let term_w = cs_w * 75 / 100;
-                        // 7px offset to account for window shadow/border
                         SetWindowPos(hwnd, 0, cs_rect.right - 7, cs_rect.top, term_w, cs_h, 0x0014);
+                        // Track live-server terminals
+                        if task_type_clone == "live-server" {
+                            init_live_terminals();
+                            let mut terms = LIVE_TERMINALS.lock().unwrap();
+                            terms.as_mut().unwrap().entry(workspace_name_clone.clone()).or_default().push(hwnd);
+                        }
                         break;
                     }
                 }
@@ -1125,6 +1181,7 @@ pub fn run() {
             toggle_prompts_folder,
             get_workspace_tasks,
             run_task,
+            toggle_live_terminal,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
