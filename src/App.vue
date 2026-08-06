@@ -391,14 +391,16 @@ onUnmounted(() => {
 
     <!-- Active workspace banner -->
     <div v-if="activeWorkspace" class="active-banner" :style="{ '--ws-color': activeWorkspace.color || '#0078d4' }">
-      <button
-        v-if="liveTerminals[activeWorkspace.name]?.length"
-        class="banner-live-icon"
-        title="Toggle live server terminal"
-        @click="toggleLiveTerminal(activeWorkspace.name)"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6.34 4.94a1 1 0 0 1 0 1.41 8.5 8.5 0 0 0 0 11.32 1 1 0 0 1-1.41 1.41C1.02 15.18 1.02 8.85 4.93 4.94a1 1 0 0 1 1.41 0zm12.73 0c3.9 3.9 3.9 10.24 0 14.14a1 1 0 0 1-1.41-1.41 8.5 8.5 0 0 0 0-11.32 1 1 0 0 1 1.41-1.41zM9.31 7.81a1 1 0 0 1 0 1.42 4.5 4.5 0 0 0 0 5.54 1 1 0 0 1-1.41 1.41 6.5 6.5 0 0 1 0-8.37 1 1 0 0 1 1.41 0zm6.96 0a6.5 6.5 0 0 1 0 8.37 1 1 0 0 1-1.41-1.41 4.5 4.5 0 0 0 0-5.54 1 1 0 0 1 1.41-1.42zM12.08 10.58a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>
-      </button>
+      <span class="banner-live-slot">
+        <button
+          v-if="liveTerminals[activeWorkspace.name]?.length"
+          class="banner-live-icon"
+          title="Toggle live server terminal"
+          @click="toggleLiveTerminal(activeWorkspace.name)"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="position:relative;z-index:1"><path d="M6.34 4.94a1 1 0 0 1 0 1.41 8.5 8.5 0 0 0 0 11.32 1 1 0 0 1-1.41 1.41C1.02 15.18 1.02 8.85 4.93 4.94a1 1 0 0 1 1.41 0zm12.73 0c3.9 3.9 3.9 10.24 0 14.14a1 1 0 0 1-1.41-1.41 8.5 8.5 0 0 0 0-11.32 1 1 0 0 1 1.41-1.41zM9.31 7.81a1 1 0 0 1 0 1.42 4.5 4.5 0 0 0 0 5.54 1 1 0 0 1-1.41 1.41 6.5 6.5 0 0 1 0-8.37 1 1 0 0 1 1.41 0zm6.96 0a6.5 6.5 0 0 1 0 8.37 1 1 0 0 1-1.41-1.41 4.5 4.5 0 0 0 0-5.54 1 1 0 0 1 1.41-1.42zM12.08 10.58a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>
+        </button>
+      </span>
       <span class="active-name">{{ activeWorkspace.name }}</span>
       <span class="active-path">{{ activeWorkspace.display_path }}</span>
       <button class="banner-task-btn" :title="taskView ? 'Back to workspaces' : 'Run tasks'" @click="toggleTaskView(activeWorkspace)">
@@ -460,7 +462,7 @@ onUnmounted(() => {
           title="Toggle live server terminal"
           @click.stop="toggleLiveTerminal(ws.name)"
         >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M6.34 4.94a1 1 0 0 1 0 1.41 8.5 8.5 0 0 0 0 11.32 1 1 0 0 1-1.41 1.41C1.02 15.18 1.02 8.85 4.93 4.94a1 1 0 0 1 1.41 0zm12.73 0c3.9 3.9 3.9 10.24 0 14.14a1 1 0 0 1-1.41-1.41 8.5 8.5 0 0 0 0-11.32 1 1 0 0 1 1.41-1.41zM9.31 7.81a1 1 0 0 1 0 1.42 4.5 4.5 0 0 0 0 5.54 1 1 0 0 1-1.41 1.41 6.5 6.5 0 0 1 0-8.37 1 1 0 0 1 1.41 0zm6.96 0a6.5 6.5 0 0 1 0 8.37 1 1 0 0 1-1.41-1.41 4.5 4.5 0 0 0 0-5.54 1 1 0 0 1 1.41-1.42zM12.08 10.58a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="position:relative;z-index:1"><path d="M6.34 4.94a1 1 0 0 1 0 1.41 8.5 8.5 0 0 0 0 11.32 1 1 0 0 1-1.41 1.41C1.02 15.18 1.02 8.85 4.93 4.94a1 1 0 0 1 1.41 0zm12.73 0c3.9 3.9 3.9 10.24 0 14.14a1 1 0 0 1-1.41-1.41 8.5 8.5 0 0 0 0-11.32 1 1 0 0 1 1.41-1.41zM9.31 7.81a1 1 0 0 1 0 1.42 4.5 4.5 0 0 0 0 5.54 1 1 0 0 1-1.41 1.41 6.5 6.5 0 0 1 0-8.37 1 1 0 0 1 1.41 0zm6.96 0a6.5 6.5 0 0 1 0 8.37 1 1 0 0 1-1.41-1.41 4.5 4.5 0 0 0 0-5.54 1 1 0 0 1 1.41-1.42zM12.08 10.58a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>
         </div>
       </div>
     </div>
@@ -481,7 +483,7 @@ onUnmounted(() => {
         </div>
         <div class="ws-info">
           <span class="ws-name">{{ t.label }}</span>
-          <span class="ws-path">{{ t.command }} {{ t.args.join(' ') }}</span>
+          <span class="ws-path">{{ t.command }} {{ t.args?.join(' ') }}</span>
         </div>
       </div>
     </div>
@@ -892,16 +894,31 @@ body {
   width: 30px;
   height: 30px;
   border-radius: 6px;
-  border: 1px solid color-mix(in srgb, var(--ws-color, #2ea043) 35%, transparent);
-  background: color-mix(in srgb, var(--ws-color, #2ea043) 20%, transparent);
+  border: 1px solid rgba(255,255,255,0.2);
+  background: color-mix(in srgb, var(--ws-color, #2ea043) 80%, #000);
   cursor: pointer;
-  animation: live-bg-pulse 2s ease-in-out infinite;
+  position: relative;
+  overflow: hidden;
+}
+
+.ws-live-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ws-color, #2ea043) 25%, #000);
+  animation: live-pulse 4s ease-in-out infinite;
+}
+
+.ws-live-btn:hover {
+  background: color-mix(in srgb, var(--ws-color, #2ea043) 40%, white);
+  border-color: rgba(255,255,255,0.4);
 }
 
 /* ── Active workspace banner ──────────────────────────── */
 .active-banner {
   display: flex; align-items: center; gap: 12px;
-  padding: 24px 16px 24px 50px; flex-shrink: 0;
+  padding: 24px 16px 24px 24px; flex-shrink: 0;
   position: relative; overflow: hidden;
   background:
     linear-gradient(90deg, var(--ws-color) 0% 20%, transparent 20%),
@@ -946,31 +963,46 @@ body {
   color: #fff;
 }
 
-.banner-live-icon {
+.banner-live-slot {
   flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  margin-right: 0px;
+}
+
+.banner-live-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.2);
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  border: none;
-  background: rgba(255,255,255,0.12);
+  background: color-mix(in srgb, var(--ws-color) 80%, #000);
+  color: rgba(255,255,255,0.8);
+  position: relative;
+  overflow: hidden;
+}
+
+.banner-live-icon:hover {
+  background: color-mix(in srgb, var(--ws-color) 40%, white);
+  border-color: rgba(255,255,255,0.4);
   color: #fff;
-  cursor: pointer;
-  margin-right: 12px;
-  animation: live-pulse 2s ease-in-out infinite;
 }
 
-.ws-live-btn {
-  background: color-mix(in srgb, var(--ws-color, #2ea043) 20%, transparent);
-  border-color: color-mix(in srgb, var(--ws-color, #2ea043) 35%, transparent);
-  animation: live-bg-pulse 2s ease-in-out infinite;
+.banner-live-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ws-color) 25%, #000);
+  animation: live-pulse 4s ease-in-out infinite;
 }
 
-.ws-live-btn:hover {
-  background: color-mix(in srgb, var(--ws-color, #2ea043) 35%, transparent) !important;
-  border-color: var(--ws-color, #2ea043) !important;
+@keyframes live-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.75; }
 }
 
 .ws-btn {
@@ -996,11 +1028,6 @@ body {
 .ws-btn-launch:hover {
   color: #58a6ff;
   border-color: #1f6feb;
-}
-
-@keyframes live-bg-pulse {
-  0%, 100% { background: color-mix(in srgb, var(--ws-color, #2ea043) 20%, transparent); }
-  50% { background: color-mix(in srgb, var(--ws-color, #2ea043) 35%, transparent); }
 }
 
 /* ── Drop zone ────────────────────────────────────────── */

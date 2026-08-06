@@ -27,7 +27,16 @@
       "command": "echo",
       "args": ["Task eseguita correttamente da CodeSpace!"],
       "codeSpace": {
-        "taskType": "echo"
+        "taskType": ""
+      }
+    },
+    {
+      "label": "🧪 Live Server Test",
+      "type": "shell",
+      "command": "ping",
+      "args": ["-t", "localhost"],
+      "codeSpace": {
+        "taskType": "live-server"
       }
     }
   ]
