@@ -926,6 +926,15 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
                 if let (Some(label), Some(cmd_name)) = (t.label, t.command) {
                     let args = t.args.unwrap_or_default();
                     let cwd = t.options.and_then(|o| o.cwd)
+                        .map(|d| {
+                            // Resolve relative paths against workspace root
+                            let p = Path::new(&d);
+                            if p.is_relative() {
+                                root.join(p).to_string_lossy().to_string()
+                            } else {
+                                d
+                            }
+                        })
                         .or_else(|| Some(root.to_string_lossy().to_string()));
                     let icon = t.icon;
                     result.push(TaskInfo { label, command: cmd_name, args, cwd, icon });
@@ -942,8 +951,12 @@ fn run_task(command: String, args: Vec<String>, cwd: Option<String>) -> Result<(
     use std::os::windows::process::CommandExt;
     const CREATE_NEW_CONSOLE: u32 = 0x00000010;
 
-    let mut cmd = Command::new(&command);
-    cmd.args(&args);
+    let mut cmd = Command::new("cmd");
+    cmd.arg("/k");
+    cmd.arg(&command);
+    for a in &args {
+        cmd.arg(a);
+    }
     cmd.creation_flags(CREATE_NEW_CONSOLE);
 
     if let Some(dir) = &cwd {
