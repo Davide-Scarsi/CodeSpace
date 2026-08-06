@@ -927,12 +927,12 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
                     let args = t.args.unwrap_or_default();
                     let cwd = t.options.and_then(|o| o.cwd)
                         .map(|d| {
-                            // Resolve relative paths against workspace root
-                            let p = Path::new(&d);
+                            let resolved = d.replace("${workspaceFolder}", &root.to_string_lossy().to_string());
+                            let p = Path::new(&resolved);
                             if p.is_relative() {
                                 root.join(p).to_string_lossy().to_string()
                             } else {
-                                d
+                                resolved
                             }
                         })
                         .or_else(|| Some(root.to_string_lossy().to_string()));
@@ -950,6 +950,22 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
 fn run_task(command: String, args: Vec<String>, cwd: Option<String>) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     const CREATE_NEW_CONSOLE: u32 = 0x00000010;
+
+    eprintln!("[DEBUG run_task] cmd={} args={:?} cwd={:?}", command, args, cwd);
+
+    if args.is_empty() && command.contains(' ') {
+        eprintln!("[DEBUG] using PowerShell (multi-word command)");
+        let mut ps = Command::new("powershell");
+        ps.args(["-NoExit", "-Command", &command]);
+        ps.creation_flags(CREATE_NEW_CONSOLE);
+        if let Some(dir) = &cwd {
+            let resolved = dir.replace("${workspaceFolder}", &std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default());
+            eprintln!("[DEBUG] ps cwd={}", resolved);
+            ps.current_dir(&resolved);
+        }
+        ps.spawn().map_err(|e| format!("Failed: {}", e))?;
+        return Ok(());
+    }
 
     let mut cmd = Command::new("cmd");
     cmd.arg("/k");
