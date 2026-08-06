@@ -26,6 +26,7 @@ interface TaskItem {
   cwd: string | null;
   icon: string;
   task_type: string;
+  url: string | null;
 }
 
 // ── State ────────────────────────────────────────────────
@@ -215,7 +216,7 @@ async function toggleTaskView(ws: WorkspaceInfo) {
 async function runTask(task: TaskItem) {
   const ws = activeWorkspace.value;
   try {
-    await invoke("run_task", { command: task.command, args: task.args, cwd: task.cwd, taskType: task.task_type, workspaceName: ws?.name || "" });
+    await invoke("run_task", { command: task.command, args: task.args, cwd: task.cwd, taskType: task.task_type, workspaceName: ws?.name || "", url: task.url });
     statusMessage.value = `Running: ${task.label}`;
   } catch (e) {
     statusMessage.value = `Error: ${e}`;
@@ -458,7 +459,7 @@ onUnmounted(() => {
         <div
           v-if="liveTerminals[ws.name]?.length"
           class="ws-live-btn"
-          :style="{ '--ws-color': ws.color || '#2ea043' }"
+          :style="{ '--ws-color': ws.color || '#0078d4' }"
           title="Toggle live server terminal"
           @click.stop="toggleLiveTerminal(ws.name)"
         >
@@ -483,7 +484,7 @@ onUnmounted(() => {
         </div>
         <div class="ws-info">
           <span class="ws-name">{{ t.label }}</span>
-          <span class="ws-path">{{ t.command }} {{ t.args?.join(' ') }}</span>
+          <span v-if="t.task_type === 'live-server'" class="ws-path">live-server</span>
         </div>
       </div>
     </div>
@@ -895,7 +896,7 @@ body {
   height: 30px;
   border-radius: 6px;
   border: 1px solid rgba(255,255,255,0.2);
-  background: color-mix(in srgb, var(--ws-color, #2ea043) 80%, #000);
+  background: color-mix(in srgb, var(--ws-color, #0078d4) 80%, #000);
   cursor: pointer;
   position: relative;
   overflow: hidden;
@@ -906,12 +907,12 @@ body {
   position: absolute;
   inset: 0;
   border-radius: 6px;
-  background: color-mix(in srgb, var(--ws-color, #2ea043) 25%, #000);
+  background: color-mix(in srgb, var(--ws-color, #0078d4) 25%, #000);
   animation: live-pulse 4s ease-in-out infinite;
 }
 
 .ws-live-btn:hover {
-  background: color-mix(in srgb, var(--ws-color, #2ea043) 40%, white);
+  background: color-mix(in srgb, var(--ws-color, #0078d4) 40%, white);
   border-color: rgba(255,255,255,0.4);
 }
 
@@ -935,11 +936,15 @@ body {
   font-weight: 700; font-size: 24px; letter-spacing: 2px;
   text-transform: uppercase; color: #fff;
   text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
 }
 .active-path {
   font-size: 11px; color: rgba(255,255,255,0.7); margin-left: auto;
   text-shadow: 0 1px 3px rgba(0,0,0,0.5);
   margin-right: 10px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex-shrink: 1;
 }
 
 .banner-task-btn {

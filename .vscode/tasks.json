@@ -18,7 +18,8 @@
         "isDefault": true
       },
       "codeSpace": {
-        "taskType": "live-server"
+        "taskType": "live-server",
+        "url": "http://localhost:1420"
       }
     },
     {

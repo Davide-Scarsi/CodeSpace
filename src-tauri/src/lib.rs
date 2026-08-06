@@ -42,6 +42,7 @@ pub struct TaskInfo {
     pub cwd: Option<String>,
     pub icon: String,
     pub task_type: String,
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -60,6 +61,7 @@ struct VsCodeTask {
 struct CodeSpaceSettings {
     #[serde(rename = "taskType")]
     task_type: Option<String>,
+    url: Option<String>,
 }
 
 /// Icon mapping: task-type → Lucide SVG path (24x24 viewBox, stroke-based)
@@ -1010,9 +1012,10 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
                             }
                         })
                         .or_else(|| Some(root.to_string_lossy().to_string()));
-                    let task_type = t.code_space.and_then(|cs| cs.task_type).unwrap_or_default();
+                    let task_type = t.code_space.as_ref().and_then(|cs| cs.task_type.clone()).unwrap_or_default();
+                    let url = t.code_space.and_then(|cs| cs.url);
                     let icon = get_task_icon(&task_type).to_string();
-                    result.push(TaskInfo { label, command: cmd_name, args, cwd, icon, task_type });
+                    result.push(TaskInfo { label, command: cmd_name, args, cwd, icon, task_type, url });
                 }
             }
         }
@@ -1022,7 +1025,7 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
 }
 
 #[tauri::command]
-fn run_task(command: String, args: Vec<String>, cwd: Option<String>, task_type: String, workspace_name: String) -> Result<(), String> {
+fn run_task(command: String, args: Vec<String>, cwd: Option<String>, task_type: String, workspace_name: String, url: Option<String>) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     const CREATE_NEW_CONSOLE: u32 = 0x00000010;
 
@@ -1033,6 +1036,7 @@ fn run_task(command: String, args: Vec<String>, cwd: Option<String>, task_type: 
 
     let task_type_clone = task_type.clone();
     let workspace_name_clone = workspace_name.clone();
+    let url_clone = url.clone();
     let spawn = move || -> Result<(), String> {
         if args.is_empty() && command.contains(' ') {
             let mut ps = Command::new("powershell");
@@ -1081,6 +1085,13 @@ fn run_task(command: String, args: Vec<String>, cwd: Option<String>, task_type: 
                             init_live_terminals();
                             let mut terms = LIVE_TERMINALS.lock().unwrap();
                             terms.as_mut().unwrap().entry(workspace_name_clone.clone()).or_default().push(hwnd);
+                        }
+                        // Open browser if URL is specified
+                        if let Some(ref open_url) = url_clone {
+                            std::thread::sleep(std::time::Duration::from_secs(2));
+                            let _ = std::process::Command::new("cmd")
+                                .args(["/c", "start", open_url])
+                                .spawn();
                         }
                         break;
                     }
