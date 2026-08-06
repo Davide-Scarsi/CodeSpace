@@ -33,6 +33,37 @@ pub struct Cache {
     pub last_scan: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TaskInfo {
+    pub label: String,
+    pub command: String,
+    pub args: Vec<String>,
+    pub cwd: Option<String>,
+    pub icon: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct VsCodeTask {
+    label: Option<String>,
+    #[serde(rename = "type")]
+    task_type: Option<String>,
+    command: Option<String>,
+    args: Option<Vec<String>>,
+    options: Option<TaskOptions>,
+    /// Custom SVG path for CodeSpace task runner (Lucide-style 24x24 path)
+    icon: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TaskOptions {
+    cwd: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TasksJson {
+    tasks: Option<Vec<VsCodeTask>>,
+}
+
 // ── Helpers ────────────────────────────────────────────────────
 
 fn get_cache_path(app: &tauri::AppHandle) -> PathBuf {
@@ -851,6 +882,82 @@ fn get_scan_info(app: tauri::AppHandle) -> serde_json::Value {
 }
 
 #[tauri::command]
+fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> {
+    let ws_file = Path::new(&workspace_path);
+    let project_dir = ws_file.parent().unwrap_or(Path::new("."));
+
+    // Resolve the first folder from the workspace to find the actual project root
+    let root = if let Ok(content) = fs::read_to_string(ws_file) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(folders) = json.get("folders").and_then(|v| v.as_array()) {
+                if let Some(first) = folders.first() {
+                    if let Some(folder_path) = first.get("path").and_then(|v| v.as_str()) {
+                        project_dir.join(folder_path)
+                    } else {
+                        project_dir.to_path_buf()
+                    }
+                } else {
+                    project_dir.to_path_buf()
+                }
+            } else {
+                project_dir.to_path_buf()
+            }
+        } else {
+            project_dir.to_path_buf()
+        }
+    } else {
+        project_dir.to_path_buf()
+    };
+
+    let tasks_path = root.join(".vscode").join("tasks.json");
+    if !tasks_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let content = fs::read_to_string(&tasks_path)
+        .map_err(|e| format!("Cannot read tasks.json: {}", e))?;
+    let tasks_json: TasksJson = serde_json::from_str(&content)
+        .map_err(|e| format!("Invalid tasks.json: {}", e))?;
+
+    let mut result = Vec::new();
+    if let Some(tasks) = tasks_json.tasks {
+        for t in tasks {
+            if t.task_type.as_deref() == Some("shell") {
+                if let (Some(label), Some(cmd_name)) = (t.label, t.command) {
+                    let args = t.args.unwrap_or_default();
+                    let cwd = t.options.and_then(|o| o.cwd)
+                        .or_else(|| Some(root.to_string_lossy().to_string()));
+                    let icon = t.icon;
+                    result.push(TaskInfo { label, command: cmd_name, args, cwd, icon });
+                }
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+#[tauri::command]
+fn run_task(command: String, args: Vec<String>, cwd: Option<String>) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NEW_CONSOLE: u32 = 0x00000010;
+
+    let mut cmd = Command::new(&command);
+    cmd.args(&args);
+    cmd.creation_flags(CREATE_NEW_CONSOLE);
+
+    if let Some(dir) = &cwd {
+        let resolved = dir.replace("${workspaceFolder}", &std::env::current_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default());
+        cmd.current_dir(&resolved);
+    }
+
+    cmd.spawn().map_err(|e| format!("Failed: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
 fn check_prompts_folder(workspace_path: String) -> Result<bool, String> {
     let ws_file = Path::new(&workspace_path);
     let content = fs::read_to_string(ws_file)
@@ -936,6 +1043,8 @@ pub fn run() {
             minimize_workspace,
             check_prompts_folder,
             toggle_prompts_folder,
+            get_workspace_tasks,
+            run_task,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

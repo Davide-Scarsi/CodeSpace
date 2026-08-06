@@ -19,6 +19,14 @@ interface WorkspaceInfo {
   is_open: boolean;
 }
 
+interface TaskItem {
+  label: string;
+  command: string;
+  args: string[];
+  cwd: string | null;
+  icon: string | null;
+}
+
 // ── State ────────────────────────────────────────────────
 const workspaces = ref<WorkspaceInfo[]>([]);
 const scanInfo = ref({ has_cache: false, count: 0, last_scan: 0 });
@@ -155,6 +163,11 @@ function handleRowClick(ws: WorkspaceInfo) {
 const modalWs = ref<WorkspaceInfo | null>(null);
 const promptsEnabled = ref(false);
 
+// ── Task View ──────────────────────────────────────────
+const taskView = ref(false);
+const taskViewWsName = ref<string | null>(null);
+const tasks = ref<TaskItem[]>([]);
+
 const PEAKOCK_COLORS = [
   "#007fff", "#ff007f", "#00bcd4", "#00ff7f", "#9c27b0",
   "#ff5722", "#ffc107", "#3f51b5", "#8bc34a", "#e91e63",
@@ -181,6 +194,32 @@ async function togglePrompts() {
   } catch (e) {
     statusMessage.value = `Error: ${e}`;
   }
+}
+
+async function toggleTaskView(ws: WorkspaceInfo) {
+  if (taskView.value) {
+    taskView.value = false;
+    taskViewWsName.value = null;
+    return;
+  }
+  try {
+    tasks.value = await invoke("get_workspace_tasks", { workspacePath: ws.path });
+  } catch {
+    tasks.value = [];
+  }
+  taskViewWsName.value = ws.name;
+  taskView.value = true;
+}
+
+async function runTask(task: TaskItem) {
+  try {
+    await invoke("run_task", { command: task.command, args: task.args, cwd: task.cwd });
+    statusMessage.value = `Running: ${task.label}`;
+  } catch (e) {
+    statusMessage.value = `Error: ${e}`;
+  }
+  taskView.value = false;
+  taskViewWsName.value = null;
 }
 
 function closeColorModal() {
@@ -254,6 +293,11 @@ onMounted(async () => {
     workspaces.value.forEach((ws) => {
       ws.is_open = open_names.includes(ws.name);
     });
+    // Close task view if user switched to a different workspace
+    if (taskView.value && active_name !== null && taskViewWsName.value !== active_name) {
+      taskView.value = false;
+      taskViewWsName.value = null;
+    }
   });
 
   // Listen for workspace-launched event (spinner cleanup)
@@ -338,10 +382,15 @@ onUnmounted(() => {
     <div v-if="activeWorkspace" class="active-banner" :style="{ '--ws-color': activeWorkspace.color || '#0078d4' }">
       <span class="active-name">{{ activeWorkspace.name }}</span>
       <span class="active-path">{{ activeWorkspace.display_path }}</span>
+      <button class="banner-task-btn" :title="taskView ? 'Back to workspaces' : 'Run tasks'" @click="toggleTaskView(activeWorkspace)">
+        <svg v-if="taskView" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        <svg v-else width="20" height="20" viewBox="0 0 512 512" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M127.083 247.824l50.031-76.906s-74.734-29.688-109.547-3.078C32.755 194.465.005 268.184.005 268.184l37.109 21.516c0-.001 46.969-91.016 89.969-41.876zM264.177 384.918l76.906-50.031s29.688 74.734 3.078 109.547c-26.625 34.797-100.344 67.563-100.344 67.563l-21.5-37.109c-.001 0 91.016-46.97 41.86-95.97zM206.692 362.887l-13.203-13.188c-24 62.375-80.375 49.188-80.375 49.188s-13.188-56.375 49.188-80.375l-13.188-13.188c-34.797-6-79.188 35.984-86.391 76.766C55.536 422.872 54.333 457.654 54.333 457.654s34.781-1.188 75.578-8.391c40.797-7.203 82.781-51.594 76.781-86.376zM505.224 6.777C450.786-18.738 312.927 28.98 236.255 130.668c-58.422 77.453-89.688 129.641-89.688 129.641l46.406 46.406 12.313 12.313 46.391 46.391s52.219-31.25 129.672-89.656C483.005 199.074 530.739 61.215 505.224 6.777zM274.63 237.371c-12.813-12.813-12.813-33.594 0-46.406s33.578-12.813 46.406.016c12.813 12.813 12.813 33.578 0 46.391-12.812 12.813-33.593 12.813-46.406 0zM351.552 160.465c-16.563-16.578-16.563-43.422 0-59.984 16.547-16.563 43.406-16.563 59.969 0s16.563 43.406 0 59.984c-16.563 16.547-43.406 16.547-59.969 0z"/></svg>
+      </button>
     </div>
 
     <!-- Workspace List -->
     <div
+      v-if="!taskView"
       class="list-container"
       ref="listRef"
       :class="{ 'drag-over': dragOver }"
@@ -384,6 +433,28 @@ onUnmounted(() => {
           <button v-else class="ws-btn ws-btn-launch" title="Open in VS Code" @click.stop="launchWorkspace(ws.path, ws.name)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task View -->
+    <div v-if="taskView" class="list-container">
+      <div v-if="tasks.length === 0" class="empty-state">
+        <p>No shell tasks found in this workspace.</p>
+      </div>
+      <div
+        v-for="t in tasks"
+        :key="t.label"
+        class="ws-card"
+        @click="runTask(t)"
+      >
+        <div class="ws-icon">
+          <svg v-if="t.icon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path :d="t.icon"/></svg>
+          <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </div>
+        <div class="ws-info">
+          <span class="ws-name">{{ t.label }}</span>
+          <span class="ws-path">{{ t.command }} {{ t.args.join(' ') }}</span>
         </div>
       </div>
     </div>
@@ -449,6 +520,7 @@ onUnmounted(() => {
         </div>
       </div>
     </Teleport>
+
   </div>
 </template>
 
@@ -844,6 +916,28 @@ body {
 .active-path {
   font-size: 11px; color: rgba(255,255,255,0.7); margin-left: auto;
   text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  margin-right: 10px;
+}
+
+.banner-task-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.8);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.banner-task-btn:hover {
+  background: rgba(255,255,255,0.2);
+  border-color: rgba(255,255,255,0.4);
+  color: #fff;
 }
 
 /* ── Drop zone ────────────────────────────────────────── */
