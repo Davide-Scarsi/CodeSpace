@@ -153,6 +153,7 @@ function handleRowClick(ws: WorkspaceInfo) {
 
 // ── Color Modal ─────────────────────────────────────────
 const modalWs = ref<WorkspaceInfo | null>(null);
+const promptsEnabled = ref(false);
 
 const PEAKOCK_COLORS = [
   "#007fff", "#ff007f", "#00bcd4", "#00ff7f", "#9c27b0",
@@ -160,8 +161,26 @@ const PEAKOCK_COLORS = [
   "#009688", "#607d8b", "#1857a4", "#dd0531", "#832561",
 ];
 
-function openColorModal(ws: WorkspaceInfo) {
+async function openColorModal(ws: WorkspaceInfo) {
   modalWs.value = ws;
+  try {
+    promptsEnabled.value = await invoke("check_prompts_folder", { workspacePath: ws.path });
+  } catch {
+    promptsEnabled.value = false;
+  }
+}
+
+async function togglePrompts() {
+  const ws = modalWs.value;
+  if (!ws) return;
+  try {
+    promptsEnabled.value = await invoke("toggle_prompts_folder", { workspacePath: ws.path });
+    statusMessage.value = promptsEnabled.value
+      ? `Prompts folder added to ${ws.name}`
+      : `Prompts folder removed from ${ws.name}`;
+  } catch (e) {
+    statusMessage.value = `Error: ${e}`;
+  }
 }
 
 function closeColorModal() {
@@ -351,7 +370,7 @@ onUnmounted(() => {
           <span class="ws-path">{{ ws.display_path }}</span>
         </div>
         <div class="ws-actions">
-          <button class="ws-btn" title="Peacock color" @click.stop="openColorModal(ws)">
+          <button class="ws-btn" title="Workspace settings" @click.stop="openColorModal(ws)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
           <!-- Spinner while launching, launch button otherwise -->
@@ -391,11 +410,15 @@ onUnmounted(() => {
       >
         <div class="modal" @click.stop>
           <div class="modal-header">
-            <span>🎨 {{ modalWs.name }}</span>
+            <span>
+              <svg class="modal-palette-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r="1.5" fill="currentColor" stroke="none"/><path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10a2 2 0 0 0 2-2c0-.52-.2-1.01-.57-1.38-.37-.36-.57-.86-.57-1.38 0-1.1.9-2 2-2H16c3.31 0 6-2.69 6-6 0-5.51-4.49-10-10-10Z"/></svg>
+              {{ modalWs.name }}
+            </span>
             <button class="modal-close" @click="closeColorModal">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
           </div>
+          <p class="modal-section-label">Choose a color for this workspace</p>
           <div class="color-grid">
             <button
               v-for="c in PEAKOCK_COLORS"
@@ -408,6 +431,20 @@ onUnmounted(() => {
             >
               <svg v-if="modalWs.color?.toLowerCase() === c.toLowerCase()" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </button>
+          </div>
+          <div class="modal-prompts-toggle">
+            <label class="toggle-label" @click.stop>
+              <span class="toggle-text">Include agents &amp; instructions</span>
+              <button
+                class="toggle-switch"
+                :class="{ active: promptsEnabled }"
+                @click="togglePrompts"
+                :aria-checked="promptsEnabled"
+                role="switch"
+              >
+                <span class="toggle-knob"></span>
+              </button>
+            </label>
           </div>
         </div>
       </div>
@@ -877,6 +914,18 @@ body {
   color: #c9d1d9;
 }
 
+.modal-section-label {
+  font-size: 11px;
+  color: #8b949e;
+  margin-bottom: 8px;
+}
+
+.modal-palette-icon {
+  vertical-align: -3px;
+  margin-right: 2px;
+  color: #8b949e;
+}
+
 .color-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -904,5 +953,60 @@ body {
   border-color: #fff;
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
   transform: scale(1.05);
+}
+
+/* ── Prompts Toggle ───────────────────────────────────── */
+.modal-prompts-toggle {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #30363d;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #c9d1d9;
+}
+
+.toggle-text {
+  user-select: none;
+  flex: 1;
+}
+
+.toggle-switch {
+  flex-shrink: 0;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  border: none;
+  background: #30363d;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s;
+  padding: 0;
+}
+
+.toggle-switch.active {
+  background: #58a6ff;
+}
+
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #c9d1d9;
+  transition: transform 0.2s;
+}
+
+.toggle-switch.active .toggle-knob {
+  transform: translateX(18px);
+  background: #fff;
 }
 </style>

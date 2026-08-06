@@ -959,6 +959,71 @@ fn get_scan_info(app: tauri::AppHandle) -> serde_json::Value {
     }
 }
 
+#[tauri::command]
+fn check_prompts_folder(workspace_path: String) -> Result<bool, String> {
+    let ws_file = Path::new(&workspace_path);
+    let content = fs::read_to_string(ws_file)
+        .map_err(|e| format!("Cannot read: {}", e))?;
+    let json: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Invalid JSON: {}", e))?;
+
+    let folders = json["folders"].as_array()
+        .ok_or("No folders array")?;
+
+    let has_prompts = folders.iter().any(|f| {
+        f.get("name").and_then(|n| n.as_str()) == Some("prompts")
+    });
+
+    Ok(has_prompts)
+}
+
+#[tauri::command]
+fn toggle_prompts_folder(workspace_path: String) -> Result<bool, String> {
+    // Build the user-specific prompts path: %APPDATA%\Code\User\prompts
+    let appdata = std::env::var("APPDATA")
+        .map_err(|e| format!("Cannot get APPDATA: {}", e))?;
+    let prompts_path = Path::new(&appdata)
+        .join("Code")
+        .join("User")
+        .join("prompts");
+    let prompts_path_str = prompts_path.to_string_lossy().to_string();
+
+    let ws_file = Path::new(&workspace_path);
+    let content = fs::read_to_string(ws_file)
+        .map_err(|e| format!("Cannot read: {}", e))?;
+    let mut json: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Invalid JSON: {}", e))?;
+
+    let folders = json["folders"].as_array_mut()
+        .ok_or("No folders array")?;
+
+    // Check if prompts folder already exists
+    let existing = folders.iter().position(|f| {
+        f.get("name").and_then(|n| n.as_str()) == Some("prompts")
+    });
+
+    if let Some(idx) = existing {
+        // Remove it
+        folders.remove(idx);
+        let new_content = serde_json::to_string_pretty(&json)
+            .map_err(|e| format!("Cannot serialize: {}", e))?;
+        fs::write(ws_file, new_content)
+            .map_err(|e| format!("Cannot write: {}", e))?;
+        Ok(false)
+    } else {
+        // Add it
+        folders.push(serde_json::json!({
+            "name": "prompts",
+            "path": prompts_path_str
+        }));
+        let new_content = serde_json::to_string_pretty(&json)
+            .map_err(|e| format!("Cannot serialize: {}", e))?;
+        fs::write(ws_file, new_content)
+            .map_err(|e| format!("Cannot write: {}", e))?;
+        Ok(true)
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -978,6 +1043,8 @@ pub fn run() {
             get_scan_info,
             focus_workspace,
             minimize_workspace,
+            check_prompts_folder,
+            toggle_prompts_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
