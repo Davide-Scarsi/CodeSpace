@@ -440,7 +440,14 @@ extern "system" {
     fn GetForegroundWindow() -> isize;
     fn SetForegroundWindow(hwnd: isize) -> i32;
     fn ShowWindow(hwnd: isize, cmd: i32) -> i32;
+    fn FindWindowW(class: *const u16, title: *const u16) -> isize;
+    fn GetWindowRect(hwnd: isize, rect: *mut Rect) -> i32;
+    fn SetWindowPos(hwnd: isize, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
 }
+
+#[cfg(windows)]
+#[repr(C)]
+struct Rect { left: i32, top: i32, right: i32, bottom: i32 }
 
 #[cfg(not(windows))]
 fn get_open_workspace_names() -> Vec<String> {
@@ -970,38 +977,65 @@ fn run_task(command: String, args: Vec<String>, cwd: Option<String>) -> Result<(
     use std::os::windows::process::CommandExt;
     const CREATE_NEW_CONSOLE: u32 = 0x00000010;
 
-    if args.is_empty() && command.contains(' ') {
-        eprintln!("[DEBUG] using PowerShell (multi-word command)");
-        let mut ps = Command::new("powershell");
-        ps.args(["-NoExit", "-Command", &command]);
-        ps.creation_flags(CREATE_NEW_CONSOLE);
-        if let Some(dir) = &cwd {
-            let resolved = dir.replace("${workspaceFolder}", &std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default());
-            eprintln!("[DEBUG] ps cwd={}", resolved);
-            ps.current_dir(&resolved);
+    // Save CodeSpace position
+    let cs_hwnd = unsafe { GetForegroundWindow() };
+    let mut cs_rect = Rect { left: 0, top: 0, right: 800, bottom: 600 };
+    unsafe { GetWindowRect(cs_hwnd, &mut cs_rect); }
+
+    let spawn = move || -> Result<(), String> {
+        if args.is_empty() && command.contains(' ') {
+            let mut ps = Command::new("powershell");
+            ps.args(["-NoExit", "-Command", &command]);
+            ps.creation_flags(CREATE_NEW_CONSOLE);
+            if let Some(dir) = &cwd {
+                let resolved = dir.replace("${workspaceFolder}", &std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default());
+                ps.current_dir(&resolved);
+            }
+            ps.spawn().map_err(|e| format!("Failed: {}", e))?;
+        } else {
+            let mut cmd = Command::new("cmd");
+            cmd.arg("/k");
+            cmd.arg(&command);
+            for a in &args { cmd.arg(a); }
+            cmd.creation_flags(CREATE_NEW_CONSOLE);
+            if let Some(dir) = &cwd {
+                let resolved = dir.replace("${workspaceFolder}", &std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default());
+                cmd.current_dir(&resolved);
+            }
+            cmd.spawn().map_err(|e| format!("Failed: {}", e))?;
         }
-        ps.spawn().map_err(|e| format!("Failed: {}", e))?;
-        return Ok(());
-    }
+        Ok(())
+    };
 
-    let mut cmd = Command::new("cmd");
-    cmd.arg("/k");
-    cmd.arg(&command);
-    for a in &args {
-        cmd.arg(a);
-    }
-    cmd.creation_flags(CREATE_NEW_CONSOLE);
+    spawn()?;
 
-    if let Some(dir) = &cwd {
-        let resolved = dir.replace("${workspaceFolder}", &std::env::current_dir()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_default());
-        cmd.current_dir(&resolved);
-    }
+    // In background, find the new console window and position it to the right
+    std::thread::spawn(move || {
+        for _ in 0..40 { // 40 * 150ms = 6 seconds
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            unsafe {
+                let hwnd = GetForegroundWindow();
+                if hwnd != 0 && hwnd != cs_hwnd {
+                    let mut r = Rect { left: 0, top: 0, right: 0, bottom: 0 };
+                    GetWindowRect(hwnd, &mut r);
+                    let w = r.right - r.left;
+                    // Only position if it looks like a console (~same height or smaller)
+                    if w > 200 {
+                        let cs_w = cs_rect.right - cs_rect.left;
+                        let cs_h = cs_rect.bottom - cs_rect.top;
+                        let term_w = cs_w * 75 / 100;
+                        // 7px offset to account for window shadow/border
+                        SetWindowPos(hwnd, 0, cs_rect.right - 7, cs_rect.top, term_w, cs_h, 0x0014);
+                        break;
+                    }
+                }
+            }
+        }
+    });
 
-    cmd.spawn().map_err(|e| format!("Failed: {}", e))?;
     Ok(())
 }
+
 
 #[tauri::command]
 fn check_prompts_folder(workspace_path: String) -> Result<bool, String> {
