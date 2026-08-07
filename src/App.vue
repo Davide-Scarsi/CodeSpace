@@ -572,6 +572,14 @@ onUnmounted(() => {
     <!-- Toolbar -->
     <div class="toolbar">
       <button
+        class="btn btn-secondary"
+        @click="settingsView = !settingsView"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </button>
+
+      <button
         class="btn btn-primary"
         :disabled="scanning"
         @click="scan(false)"
@@ -601,10 +609,6 @@ onUnmounted(() => {
         </span>
       </div>
 
-      <button class="btn btn-icon" title="Settings" @click="settingsView = !settingsView">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      </button>
-
       <div class="toolbar-spacer"></div>
 
       <span v-if="scanInfo.has_cache" class="cache-badge">
@@ -616,7 +620,7 @@ onUnmounted(() => {
     <div v-if="statusMessage" class="status-bar">{{ statusMessage }}</div>
 
     <!-- Active workspace banner -->
-    <div v-if="bannerWorkspace" class="active-banner" :style="{ '--ws-color': bannerWorkspace.color || '#0078d4' }">
+    <div v-if="bannerWorkspace && !settingsView" class="active-banner" :style="{ '--ws-color': bannerWorkspace.color || '#0078d4' }">
       <span class="banner-live-slot">
         <button
           v-if="liveTerminals[bannerWorkspace.name]?.length || (terminalTabs[bannerWorkspace.name] || EMPTY_TABS).some(t => t.taskType === 'live-server')"
@@ -637,7 +641,12 @@ onUnmounted(() => {
 
     <!-- Settings Page -->
     <div v-if="settingsView" class="settings-page">
-      <h2 class="settings-title">Settings</h2>
+      <div class="settings-header">
+        <h2 class="settings-title">Settings</h2>
+        <button class="btn btn-icon" @click="settingsView = false" title="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
 
       <div class="settings-section">
         <h3>Updates</h3>
@@ -989,11 +998,18 @@ body {
   padding: 24px 32px;
 }
 
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
 .settings-title {
   font-size: 20px;
   font-weight: 600;
-  margin-bottom: 24px;
   color: #c9d1d9;
+  margin: 0;
 }
 
 .settings-section {
@@ -1025,9 +1041,11 @@ body {
   background: #0d1117;
   border: 1px solid #30363d;
   border-radius: 6px;
-  padding: 4px 10px;
+  padding: 6px 10px;
   flex: 1;
   max-width: 320px;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .search-icon-svg {
@@ -1042,6 +1060,8 @@ body {
   color: #c9d1d9;
   font-size: 13px;
   outline: none;
+  padding: 0;
+  line-height: 1.4;
 }
 
 .search-input::placeholder {
