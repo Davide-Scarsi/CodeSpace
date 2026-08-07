@@ -419,9 +419,20 @@ onMounted(async () => {
     }
   });
 
-  // Listen for terminal-exit (just log, tab stays open)
-  await listen<{ terminalId: string }>("terminal-exit", (_event) => {
-    // Tab stays open so user can see output
+  // Listen for terminal-exit (clean up runningTasks spinner)
+  await listen<{ terminalId: string }>("terminal-exit", (event) => {
+    const tid = event.payload.terminalId;
+    for (const [wsName, tabs] of Object.entries(terminalTabs.value)) {
+      const tab = tabs.find(t => t.id === tid);
+      if (tab && tab.taskType && tab.taskType !== "live-server") {
+        const arr = runningTasks.value[wsName];
+        if (arr) {
+          runningTasks.value[wsName] = arr.filter(t => t !== tab.taskType);
+          if (runningTasks.value[wsName].length === 0) delete runningTasks.value[wsName];
+        }
+        break;
+      }
+    }
   });
   // console.log("[DEBUG] listener set up");
 });
@@ -948,7 +959,7 @@ body {
 .ws-card {
   display: flex;
   align-items: center;
-  gap: 2ch;
+  gap: 1ch;
   padding: 8px 12px 8px 16px;
   margin: 2px 0;
   border-radius: 6px;
@@ -1026,6 +1037,7 @@ body {
   flex-direction: column;
   flex: 1;
   min-width: 0;
+  margin-left: 1ch;
 }
 
 .ws-name {
@@ -1265,8 +1277,8 @@ body {
 }
 
 .ws-btn-launch:hover {
-  color: #58a6ff;
-  border-color: #1f6feb;
+  color: var(--ws-color, #58a6ff);
+  border-color: color-mix(in srgb, var(--ws-color, #1f6feb) 60%, white);
 }
 
 /* ── Drop zone ────────────────────────────────────────── */
