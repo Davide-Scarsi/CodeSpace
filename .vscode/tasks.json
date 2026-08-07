@@ -4,7 +4,12 @@
     {
       "label": "Avvia CodeSpace in locale",
       "type": "shell",
-      "command": "npx tauri dev",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "Get-Process CodeSpace -ErrorAction SilentlyContinue | Stop-Process -Force; Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force; npx tauri dev"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -28,7 +33,8 @@
       "command": "echo",
       "args": ["Task eseguita correttamente da CodeSpace!"],
       "codeSpace": {
-        "taskType": ""
+        "taskType": "",
+        "confirmationRequest": true
       }
     },
     {

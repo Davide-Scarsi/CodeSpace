@@ -43,6 +43,7 @@ pub struct TaskInfo {
     pub icon: String,
     pub task_type: String,
     pub url: Option<String>,
+    pub confirm_before_run: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -62,6 +63,8 @@ struct CodeSpaceSettings {
     #[serde(rename = "taskType")]
     task_type: Option<String>,
     url: Option<String>,
+    #[serde(rename = "confirmationRequest")]
+    confirmation_request: Option<bool>,
 }
 
 /// Icon mapping: task-type → Lucide SVG path (24x24 viewBox, stroke-based)
@@ -1013,9 +1016,10 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
                         })
                         .or_else(|| Some(root.to_string_lossy().to_string()));
                     let task_type = t.code_space.as_ref().and_then(|cs| cs.task_type.clone()).unwrap_or_default();
-                    let url = t.code_space.and_then(|cs| cs.url);
+                    let url = t.code_space.as_ref().and_then(|cs| cs.url.clone());
+                    let confirm = t.code_space.as_ref().and_then(|cs| cs.confirmation_request);
                     let icon = get_task_icon(&task_type).to_string();
-                    result.push(TaskInfo { label, command: cmd_name, args, cwd, icon, task_type, url });
+                    result.push(TaskInfo { label, command: cmd_name, args, cwd, icon, task_type, url, confirm_before_run: confirm });
                 }
             }
         }

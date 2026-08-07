@@ -27,6 +27,7 @@ interface TaskItem {
   icon: string;
   task_type: string;
   url: string | null;
+  confirm_before_run?: boolean;
 }
 
 // ── State ────────────────────────────────────────────────
@@ -170,6 +171,10 @@ const taskView = ref(false);
 const taskViewWsName = ref<string | null>(null);
 const tasks = ref<TaskItem[]>([]);
 
+// Confirm-before-run modal state
+const confirmModalVisible = ref(false);
+const confirmModalTask = ref<TaskItem | null>(null);
+
 const PEAKOCK_COLORS = [
   "#007fff", "#ff007f", "#00bcd4", "#00ff7f", "#9c27b0",
   "#ff5722", "#ffc107", "#3f51b5", "#8bc34a", "#e91e63",
@@ -205,7 +210,16 @@ async function toggleTaskView(ws: WorkspaceInfo) {
     return;
   }
   try {
-    tasks.value = await invoke("get_workspace_tasks", { workspacePath: ws.path });
+    const rawTasks: any = await invoke("get_workspace_tasks", { workspacePath: ws.path });
+    tasks.value = (rawTasks || []).map((t: any) => ({
+      ...t,
+      confirm_before_run: !!(
+        t.confirm_before_run ||
+        (t.codeSpace && (t.codeSpace.confirmationRequest ?? t.codeSpace.confirmationrequest)) ||
+        t.confirmationRequest ||
+        t.confirmationrequest
+      ),
+    }));
   } catch {
     tasks.value = [];
   }
@@ -213,7 +227,7 @@ async function toggleTaskView(ws: WorkspaceInfo) {
   taskView.value = true;
 }
 
-async function runTask(task: TaskItem) {
+async function runTaskExecute(task: TaskItem) {
   const ws = activeWorkspace.value;
   try {
     await invoke("run_task", { command: task.command, args: task.args, cwd: task.cwd, taskType: task.task_type, workspaceName: ws?.name || "", url: task.url });
@@ -223,6 +237,28 @@ async function runTask(task: TaskItem) {
   }
   taskView.value = false;
   taskViewWsName.value = null;
+}
+
+function runTask(task: TaskItem) {
+  if (task.confirm_before_run) {
+    confirmModalTask.value = task;
+    confirmModalVisible.value = true;
+    return;
+  }
+  void runTaskExecute(task);
+}
+
+function cancelConfirmRun() {
+  confirmModalVisible.value = false;
+  confirmModalTask.value = null;
+}
+
+async function confirmRunTask() {
+  const task = confirmModalTask.value;
+  if (!task) return cancelConfirmRun();
+  confirmModalVisible.value = false;
+  confirmModalTask.value = null;
+  await runTaskExecute(task);
 }
 
 function closeColorModal() {
@@ -500,6 +536,28 @@ onUnmounted(() => {
       <div v-if="dragOver" class="drop-zone">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span>Drop folder to add workspace</span>
+      </div>
+    </Teleport>
+
+    <!-- Confirm Run Modal -->
+    <Teleport to="body">
+      <div v-if="confirmModalVisible" class="modal-overlay" @click="cancelConfirmRun">
+        <div class="modal" @click.stop>
+          <div class="modal-header">
+            <span>Confirm Task</span>
+            <button class="modal-close" @click="cancelConfirmRun">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          </div>
+          <div class="modal-body" style="padding:12px 16px;">
+            <p>Run task: <strong>{{ confirmModalTask && confirmModalTask.label }}</strong>?</p>
+            <p style="font-size:12px;color:var(--muted,#8b949e)">This will execute the configured command in the workspace.</p>
+          </div>
+          <div class="modal-actions" style="display:flex;gap:8px;padding:12px 16px;justify-content:flex-end;">
+            <button class="btn" @click="cancelConfirmRun">Cancel</button>
+            <button class="btn btn-primary" @click="confirmRunTask">Run</button>
+          </div>
+        </div>
       </div>
     </Teleport>
 
