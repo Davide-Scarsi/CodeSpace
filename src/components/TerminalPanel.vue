@@ -346,7 +346,7 @@ onUnmounted(() => {
 .term-body {
   flex: 1;
   min-height: 0;
-  padding: 0;
+  padding: 2ex 2ch;
 }
 
 .term-body :deep(.xterm) {
