@@ -487,8 +487,6 @@ extern "system" {
     fn IsIconic(hwnd: isize) -> i32;
     #[allow(dead_code)]
     fn FindWindowW(class: *const u16, title: *const u16) -> isize;
-    fn GetWindowRect(hwnd: isize, rect: *mut Rect) -> i32;
-    fn SetWindowPos(hwnd: isize, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
     fn GetClassNameW(hwnd: isize, buf: *mut u16, max: i32) -> i32;
     fn GetWindowThreadProcessId(hwnd: isize, pid: *mut u32) -> u32;
     fn GetCurrentThreadId() -> u32;
@@ -498,10 +496,6 @@ extern "system" {
     fn QueryFullProcessImageNameW(handle: isize, flags: u32, buf: *mut u16, size: *mut u32) -> i32;
     fn CloseHandle(handle: isize) -> i32;
 }
-
-#[cfg(windows)]
-#[repr(C)]
-struct Rect { left: i32, top: i32, right: i32, bottom: i32 }
 
 #[cfg(not(windows))]
 fn get_open_workspace_names() -> Vec<String> {
@@ -934,26 +928,6 @@ fn stop_workspace_monitor() {
     MONITOR_RUNNING.store(false, Ordering::SeqCst);
 }
 
-/// Toggle a live-server terminal window (minimize/restore)
-#[tauri::command]
-fn toggle_live_terminal(hwnds: Vec<isize>) -> Result<(), String> {
-    #[cfg(windows)]
-    unsafe {
-        for &h in &hwnds {
-            if IsWindow(h) != 0 {
-                if IsIconic(h) != 0 {
-                    ShowWindow(h, 9);
-                } else {
-                    ShowWindow(h, 6);
-                }
-                SetForegroundWindow(h);
-            }
-        }
-    }
-    let _ = hwnds;
-    Ok(())
-}
-
 #[tauri::command]
 fn create_workspace(folder_path: String) -> Result<String, String> {
     let folder = Path::new(&folder_path);
@@ -1069,148 +1043,6 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
 
     Ok(result)
 }
-
-#[tauri::command]
-fn run_task(app: tauri::AppHandle, command: String, args: Vec<String>, cwd: Option<String>, task_type: String, workspace_name: String, url: Option<String>, close_when_done: Option<bool>) -> Result<(), String> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NEW_CONSOLE: u32 = 0x00000010;
-
-    // Save CodeSpace position
-    let cs_hwnd = unsafe { GetForegroundWindow() };
-    let mut cs_rect = Rect { left: 0, top: 0, right: 800, bottom: 600 };
-    unsafe { GetWindowRect(cs_hwnd, &mut cs_rect); }
-
-    let task_type_clone = task_type.clone();
-    let workspace_name_clone = workspace_name.clone();
-    let url_clone = url.clone();
-    let task_type_wait = task_type.clone();
-    let workspace_name_wait = workspace_name.clone();
-    let app_wait = app.clone();
-    let close_when_done_val = close_when_done.unwrap_or(false);
-
-    // Marker file for closeWhenDone tasks (bypasses child.wait() which hangs with CREATE_NEW_CONSOLE)
-    let done_file = if close_when_done_val && task_type_wait != "live-server" {
-        let tmp = std::env::temp_dir();
-        let fname = format!("cs_done_{}_{}.tmp", workspace_name_wait, task_type_wait);
-        Some(tmp.join(fname))
-    } else {
-        None
-    };
-
-    // Spawn the child process
-    let mut child: Option<std::process::Child>;
-    if args.is_empty() && command.contains(' ') {
-        let mut ps = Command::new("powershell");
-        ps.args(["-NoExit", "-Command", &command]);
-        ps.creation_flags(CREATE_NEW_CONSOLE);
-        if let Some(dir) = &cwd {
-            let resolved = dir.replace("${workspaceFolder}", &std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default());
-            ps.current_dir(&resolved);
-        }
-        child = Some(ps.spawn().map_err(|e| format!("Failed: {}", e))?);
-    } else {
-        let mut cmd = Command::new("cmd");
-        cmd.arg("/k");
-        cmd.arg(&command);
-        for a in &args { cmd.arg(a); }
-        if let Some(ref df) = done_file {
-            cmd.env("CODESPACE_DONE_FILE", df.to_string_lossy().to_string());
-        }
-        cmd.creation_flags(CREATE_NEW_CONSOLE);
-        if let Some(dir) = &cwd {
-            let resolved = dir.replace("${workspaceFolder}", &std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default());
-            cmd.current_dir(&resolved);
-        }
-        child = Some(cmd.spawn().map_err(|e| format!("Failed: {}", e))?);
-    }
-
-    // Background: wait for task completion (non-live-server only)
-    if task_type_wait != "live-server" {
-        std::thread::spawn(move || {
-            if let Some(df) = done_file {
-                // Poll for marker file, fall back to process exit if window closed early
-                let pid = child.as_ref().map(|c| c.id());
-                eprintln!("[task-wait] polling marker: {} (pid={:?})", df.display(), pid);
-                loop {
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                    // Check marker file
-                    if df.exists() {
-                        let _ = fs::remove_file(&df);
-                        eprintln!("[task-wait] marker found, emitting task-finished for {}", workspace_name_wait);
-                        let _ = app_wait.emit("task-finished", serde_json::json!({
-                            "workspaceName": workspace_name_wait,
-                            "taskType": task_type_wait,
-                        }));
-                        break;
-                    }
-                    // Check if process died (user closed terminal)
-                    if let Some(ref mut c) = child {
-                        match c.try_wait() {
-                            Ok(Some(status)) => {
-                                let _ = fs::remove_file(&df);
-                                eprintln!("[task-wait] process exited {:?}, emitting task-finished for {}", status, workspace_name_wait);
-                                let _ = app_wait.emit("task-finished", serde_json::json!({
-                                    "workspaceName": workspace_name_wait,
-                                    "taskType": task_type_wait,
-                                }));
-                                break;
-                            }
-                            Err(_) => break, // process gone
-                            _ => {} // still running, keep polling
-                        }
-                    }
-                }
-            } else if let Some(mut c) = child {
-                eprintln!("[task-wait] waiting for pid={}", c.id());
-                let status = c.wait();
-                eprintln!("[task-wait] pid done: {:?}, emitting task-finished for {}", status, workspace_name_wait);
-                let _ = app_wait.emit("task-finished", serde_json::json!({
-                    "workspaceName": workspace_name_wait,
-                    "taskType": task_type_wait,
-                }));
-            }
-        });
-    }
-
-    // In background, find the new console window and position it to the right
-    std::thread::spawn(move || {
-        for _i in 0..40 { // 40 * 150ms = 6 seconds
-            std::thread::sleep(std::time::Duration::from_millis(150));
-            unsafe {
-                let hwnd = GetForegroundWindow();
-                if hwnd != 0 && hwnd != cs_hwnd {
-                    let mut r = Rect { left: 0, top: 0, right: 0, bottom: 0 };
-                    GetWindowRect(hwnd, &mut r);
-                    let w = r.right - r.left;
-                    // Only position if it looks like a console (~same height or smaller)
-                    if w > 200 {
-                        let cs_w = cs_rect.right - cs_rect.left;
-                        let cs_h = cs_rect.bottom - cs_rect.top;
-                        let term_w = cs_w * 75 / 100;
-                        SetWindowPos(hwnd, 0, cs_rect.right - 7, cs_rect.top, term_w, cs_h, 0x0014);
-                        // Track live-server terminals
-                        if task_type_clone == "live-server" {
-                            init_live_terminals();
-                            let mut terms = LIVE_TERMINALS.lock().unwrap();
-                            terms.as_mut().unwrap().entry(workspace_name_clone.clone()).or_default().push(hwnd);
-                        }
-                        // Open browser if URL is specified
-                        if let Some(ref open_url) = url_clone {
-                            std::thread::sleep(std::time::Duration::from_secs(2));
-                            let _ = std::process::Command::new("cmd")
-                                .args(["/c", "start", open_url])
-                                .spawn();
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-    });
-
-    Ok(())
-}
-
 
 #[tauri::command]
 fn check_prompts_folder(workspace_path: String) -> Result<bool, String> {
@@ -1387,8 +1219,6 @@ pub fn run() {
             check_prompts_folder,
             toggle_prompts_folder,
             get_workspace_tasks,
-            run_task,
-            toggle_live_terminal,
             terminal::terminal_spawn,
             terminal::terminal_write,
             terminal::terminal_kill,
