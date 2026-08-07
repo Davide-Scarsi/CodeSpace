@@ -28,7 +28,6 @@ rust-target/
 rust-build/
 .cargo/
 src-tauri/keys.txt
-latest.json
 update/
 
 # Agents (local work files, not for commit)
