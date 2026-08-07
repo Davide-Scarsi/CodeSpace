@@ -1,6 +1,6 @@
 [package]
 name = "CodeSpace"
-version = "1.0.8"
+version = "1.0.9"
 description = "CodeSpace - VS Code Workspace Manager"
 authors = ["Davide Scarsi"]
 edition = "2021"
