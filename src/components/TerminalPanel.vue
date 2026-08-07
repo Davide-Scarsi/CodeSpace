@@ -1,7 +1,8 @@
 <script lang="ts">
 import { ref } from "vue";
-// Persists across TerminalPanel mounts/unmounts
+// Persist across TerminalPanel mounts/unmounts
 const exitedIds = ref<Set<string>>(new Set());
+const persistedTabId = ref<string | null>(null);
 </script>
 
 <script setup lang="ts">
@@ -39,14 +40,24 @@ const outputCache = ref<Record<string, string>>({});
 
 watch(() => props.tabs, async (tabs) => {
   console.log("[term] tabs changed:", tabs.length);
-  if (tabs.length > 0 && !activeTabId.value) {
-    activeTabId.value = tabs[0].id;
-  }
-  if (tabs.length === 0) {
+  if (tabs.length > 0) {
+    // Restore previously active tab if it still exists
+    if (persistedTabId.value && tabs.some(t => t.id === persistedTabId.value)) {
+      activeTabId.value = persistedTabId.value;
+    } else if (!activeTabId.value || !tabs.some(t => t.id === activeTabId.value)) {
+      activeTabId.value = tabs[0].id;
+      persistedTabId.value = tabs[0].id;
+    }
+  } else {
     activeTabId.value = null;
     if (term) { term.dispose(); term = null; }
   }
 }, { immediate: true });
+
+// Keep persisted tab in sync with active
+watch(activeTabId, (id) => {
+  if (id) persistedTabId.value = id;
+});
 
 watch(activeTabId, async (id) => {
   if (!id) return;

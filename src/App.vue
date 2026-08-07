@@ -703,7 +703,6 @@ onUnmounted(() => {
           </div>
           <div class="ws-info">
             <span class="ws-name">{{ t.label }}</span>
-            <span v-if="t.task_type === 'live-server'" class="ws-path">live-server</span>
           </div>
         </div>
       </div>
