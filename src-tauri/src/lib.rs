@@ -1268,6 +1268,61 @@ fn launch_url(url: String) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(windows)]
+#[tauri::command]
+fn focus_browser(url: String) -> Result<(), String> {
+    static CACHE: Mutex<Option<HashMap<String, isize>>> = Mutex::new(None);
+
+    fn init_cache() {
+        let mut g = CACHE.lock().unwrap();
+        if g.is_none() { *g = Some(HashMap::new()); }
+    }
+
+    init_cache();
+
+    // 1. Try cached HWND first
+    {
+        let cache = CACHE.lock().unwrap();
+        if let Some(hwnd) = cache.as_ref().unwrap().get(&url) {
+            let h = *hwnd;
+            drop(cache);
+            unsafe {
+                if IsWindow(h) != 0 && IsWindowVisible(h) != 0 {
+                    if IsIconic(h) != 0 { ShowWindow(h, 9); }
+                    SetForegroundWindow(h);
+                    return Ok(());
+                }
+            }
+            CACHE.lock().unwrap().as_mut().unwrap().remove(&url);
+        }
+    }
+
+    // 2. Launch URL, then capture the browser HWND from foreground
+    let _ = std::process::Command::new("cmd")
+        .args(["/c", "start", "", &url])
+        .spawn();
+
+    // Wait for browser to open and take focus
+    std::thread::sleep(std::time::Duration::from_millis(2000));
+
+    // The browser should now be the foreground window
+    unsafe {
+        let fg = GetForegroundWindow();
+        if fg != 0 && IsWindow(fg) != 0 {
+            CACHE.lock().unwrap().as_mut().unwrap().insert(url.clone(), fg);
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+fn focus_browser(url: String) -> Result<(), String> {
+    // Non-Windows: just open URL
+    launch_url(url)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1296,6 +1351,7 @@ pub fn run() {
             terminal::terminal_write,
             terminal::terminal_kill,
             launch_url,
+            focus_browser,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

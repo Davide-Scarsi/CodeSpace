@@ -286,7 +286,7 @@ async function runTaskExecute(task: TaskItem) {
     console.log("[task] spawning terminal:", tabId, task.command, task.args);
     await invoke("terminal_spawn", { terminalId: tabId, command: task.command, args: task.args, cwd: task.cwd });
     if (task.url) {
-      setTimeout(() => { invoke("launch_url", { url: task.url }).catch(() => {}); }, 2000);
+      setTimeout(() => { invoke("focus_browser", { url: task.url }).catch(() => {}); }, 2000);
     }
     statusMessage.value = `Running: ${task.label}`;
   } catch (e) {
@@ -376,7 +376,7 @@ function openLiveUrl(wsName: string) {
   const tabs = terminalTabs.value[wsName] || [];
   const liveTab = tabs.find(t => t.taskType === "live-server" && t.url);
   if (liveTab?.url) {
-    invoke("launch_url", { url: liveTab.url }).catch(() => {});
+    invoke("focus_browser", { url: liveTab.url }).catch(() => {});
   }
 }
 
