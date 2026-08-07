@@ -233,6 +233,11 @@ async function toggleTaskView(ws: WorkspaceInfo) {
     taskViewWsName.value = null;
     return;
   }
+  await openTaskView(ws);
+}
+
+async function openTaskView(ws: WorkspaceInfo) {
+  if (taskView.value && taskViewWsName.value === ws.name) return; // already open
   try {
     const rawTasks: any = await invoke("get_workspace_tasks", { workspacePath: ws.path });
     tasks.value = (rawTasks || []).map((t: any) => ({
@@ -672,6 +677,7 @@ onUnmounted(() => {
           class="ws-term-count"
           :title="terminalTabs[ws.name].length + ' terminal(s) open'"
           :style="{ color: ws.color || '#8b949e' }"
+          @click.stop="openTaskView(ws)"
         >
           <span class="ws-term-num">{{ (terminalTabs[ws.name] || EMPTY_TABS).length }}</span>
           <svg width="32" height="32" viewBox="0 0 24 24" :fill="ws.color || '#8b949e'" xmlns="http://www.w3.org/2000/svg"><path d="M21.5 3h-19A1.504 1.504 0 0 0 1 4.5v15A1.5 1.5 0 0 0 2.5 21h19a1.5 1.5 0 0 0 1.5-1.5v-15A1.504 1.504 0 0 0 21.5 3zm.5 16.5a.501.501 0 0 1-.5.5h-19a.501.501 0 0 1-.5-.5v-15a.506.506 0 0 1 .5-.5h19a.506.506 0 0 1 .5.5zM5.354 15.354l-.707-.707L7.793 11.5 4.646 8.354l.707-.707L9.207 11.5zM15 15h-5v-1h5z"/></svg>
@@ -1233,6 +1239,7 @@ body {
   align-items: center;
   gap: 1ch;
   margin-left: 4px;
+  cursor: pointer;
 }
 
 .ws-term-num {
