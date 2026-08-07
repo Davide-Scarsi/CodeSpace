@@ -4,6 +4,9 @@ use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use tauri::Emitter;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 struct TermSession { stdin: Mutex<Box<dyn Write + Send>>, child_pid: u32, }
 static TERMINALS: Mutex<Option<HashMap<String, TermSession>>> = Mutex::new(None);
 fn init_terminals() { let mut g = TERMINALS.lock().unwrap(); if g.is_none() { *g = Some(HashMap::new()); } }
@@ -20,6 +23,8 @@ pub fn terminal_spawn(app: tauri::AppHandle, terminal_id: String, command: Strin
     let mut cmd = Command::new(&cmd_name);
     for a in &final_args { cmd.arg(a); }
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).stdin(Stdio::piped());
+    #[cfg(windows)]
+    { cmd.creation_flags(0x08000000); } // CREATE_NO_WINDOW
     if let Some(ref dir) = cwd { cmd.current_dir(dir); }
     let mut child = cmd.spawn().map_err(|e| format!("Spawn: {}", e))?;
     let pid = child.id();
