@@ -245,30 +245,25 @@ async function toggleTaskView(ws: WorkspaceInfo) {
 async function runTaskExecute(task: TaskItem) {
   const ws = activeWorkspace.value;
   const wsName = ws?.name || "";
-  const isBackground = task.task_type === "live-server" || task.task_type === "php-server";
-  if (task.task_type && !isBackground) {
+  if (task.task_type) {
     if (!runningTasks.value[wsName]) runningTasks.value[wsName] = [];
     if (!runningTasks.value[wsName].includes(task.task_type)) {
       runningTasks.value[wsName].push(task.task_type);
     }
   }
   try {
-    if (isBackground) {
-      await invoke("run_task", { command: task.command, args: task.args, cwd: task.cwd, taskType: task.task_type, workspaceName: wsName, url: task.url, closeWhenDone: false });
-    } else {
-      const tabId = task.task_type + "-" + Date.now();
-      const color = ws?.color || "#0078d4";
-      terminalTabs.value.push({ id: tabId, label: task.label, taskType: task.task_type || "default", color });
-      if (terminalTabs.value.length === 1) {
-        try {
-          const win = getCurrentWindow();
-          const size = await win.outerSize();
-          await win.setSize(new LogicalSize(size.width * 2, size.height));
-        } catch (_) {}
-      }
-      console.log("[task] spawning terminal:", tabId, task.command, task.args);
-      await invoke("terminal_spawn", { terminalId: tabId, command: task.command, args: task.args, cwd: task.cwd });
+    const tabId = task.task_type + "-" + Date.now();
+    const color = ws?.color || "#0078d4";
+    terminalTabs.value.push({ id: tabId, label: task.label, taskType: task.task_type || "default", color });
+    if (terminalTabs.value.length === 1) {
+      try {
+        const win = getCurrentWindow();
+        const size = await win.outerSize();
+        await win.setSize(new LogicalSize(size.width * 2, size.height));
+      } catch (_) {}
     }
+    console.log("[task] spawning terminal:", tabId, task.command, task.args);
+    await invoke("terminal_spawn", { terminalId: tabId, command: task.command, args: task.args, cwd: task.cwd });
     statusMessage.value = `Running: ${task.label}`;
   } catch (e) {
     statusMessage.value = `Error: ${e}`;

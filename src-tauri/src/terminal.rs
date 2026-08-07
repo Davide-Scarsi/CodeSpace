@@ -11,13 +11,19 @@ fn init_terminals() { let mut g = TERMINALS.lock().unwrap(); if g.is_none() { *g
 #[tauri::command]
 pub fn terminal_spawn(app: tauri::AppHandle, terminal_id: String, command: String, mut args: Vec<String>, cwd: Option<String>) -> Result<(), String> {
     eprintln!("[term] spawn id={} cmd={} args={:?}", terminal_id, command, args);
-    let is_ps = command.eq_ignore_ascii_case("powershell") || command.eq_ignore_ascii_case("pwsh");
-    if is_ps && !args.is_empty() {
-        let last = args.len() - 1;
-        args[last] = format!("{} *>&1", args[last]);
-    }
-    let mut cmd = Command::new(&command);
-    for a in &args { cmd.arg(a); }
+    // If args is empty and command contains spaces, use PowerShell -Command
+    let (cmd_name, final_args): (String, Vec<String>) = if args.is_empty() && command.contains(' ') {
+        ("powershell".into(), vec!["-NoProfile".into(), "-Command".into(), format!("{} *>&1", command)])
+    } else {
+        let is_ps = command.eq_ignore_ascii_case("powershell") || command.eq_ignore_ascii_case("pwsh");
+        if is_ps && !args.is_empty() {
+            let last = args.len() - 1;
+            args[last] = format!("{} *>&1", args[last]);
+        }
+        (command, args)
+    };
+    let mut cmd = Command::new(&cmd_name);
+    for a in &final_args { cmd.arg(a); }
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).stdin(Stdio::piped());
     if let Some(ref dir) = cwd { cmd.current_dir(dir); }
     let mut child = cmd.spawn().map_err(|e| format!("Spawn: {}", e))?;
