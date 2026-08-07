@@ -28,6 +28,7 @@ interface TaskItem {
   task_type: string;
   url: string | null;
   confirm_before_run?: boolean;
+  close_when_done?: boolean;
 }
 
 // ── State ────────────────────────────────────────────────
@@ -236,11 +237,28 @@ async function toggleTaskView(ws: WorkspaceInfo) {
 
 async function runTaskExecute(task: TaskItem) {
   const ws = activeWorkspace.value;
+  const wsName = ws?.name || "";
+  // Track non-live-server tasks for spinner
+  if (task.task_type && task.task_type !== "live-server") {
+    if (!runningTasks.value[wsName]) runningTasks.value[wsName] = [];
+    if (!runningTasks.value[wsName].includes(task.task_type)) {
+      runningTasks.value[wsName].push(task.task_type);
+      console.log("[task-start] tracking:", wsName, task.task_type, "closeWhenDone:", task.close_when_done);
+    }
+  }
   try {
-    await invoke("run_task", { command: task.command, args: task.args, cwd: task.cwd, taskType: task.task_type, workspaceName: ws?.name || "", url: task.url });
+    await invoke("run_task", { command: task.command, args: task.args, cwd: task.cwd, taskType: task.task_type, workspaceName: wsName, url: task.url, closeWhenDone: task.close_when_done ?? false });
     statusMessage.value = `Running: ${task.label}`;
   } catch (e) {
     statusMessage.value = `Error: ${e}`;
+    // Clean up on error
+    if (task.task_type && task.task_type !== "live-server") {
+      const arr = runningTasks.value[wsName];
+      if (arr) {
+        runningTasks.value[wsName] = arr.filter(t => t !== task.task_type);
+        if (runningTasks.value[wsName].length === 0) delete runningTasks.value[wsName];
+      }
+    }
   }
   taskView.value = false;
   taskViewWsName.value = null;
@@ -313,6 +331,7 @@ let unlistenLaunchFailed: (() => void) | null = null;
 const debugOpenNames = ref<string[]>([]);
 const debugActiveName = ref<string | null>(null);
 const liveTerminals = ref<Record<string, number[]>>({});
+const runningTasks = ref<Record<string, string[]>>({});
 
 async function toggleLiveTerminal(wsName: string) {
   const hwnds = liveTerminals.value[wsName];
@@ -367,6 +386,19 @@ onMounted(async () => {
     const wsName = event.payload;
     launching.value[wsName] = false;
     statusMessage.value = `Launch timeout: ${wsName}`;
+  });
+
+  // Listen for task-finished events (hide running spinner)
+  await listen<{ workspaceName: string; taskType: string }>("task-finished", (event) => {
+    console.log("[task-finished] received:", event.payload);
+    const { workspaceName, taskType } = event.payload;
+    const arr = runningTasks.value[workspaceName];
+    if (arr) {
+      runningTasks.value[workspaceName] = arr.filter(t => t !== taskType);
+      if (runningTasks.value[workspaceName].length === 0) {
+        delete runningTasks.value[workspaceName];
+      }
+    }
   });
   // console.log("[DEBUG] listener set up");
 });
@@ -508,6 +540,13 @@ onUnmounted(() => {
           @click.stop="toggleLiveTerminal(ws.name)"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="position:relative;z-index:1"><path d="M6.34 4.94a1 1 0 0 1 0 1.41 8.5 8.5 0 0 0 0 11.32 1 1 0 0 1-1.41 1.41C1.02 15.18 1.02 8.85 4.93 4.94a1 1 0 0 1 1.41 0zm12.73 0c3.9 3.9 3.9 10.24 0 14.14a1 1 0 0 1-1.41-1.41 8.5 8.5 0 0 0 0-11.32 1 1 0 0 1 1.41-1.41zM9.31 7.81a1 1 0 0 1 0 1.42 4.5 4.5 0 0 0 0 5.54 1 1 0 0 1-1.41 1.41 6.5 6.5 0 0 1 0-8.37 1 1 0 0 1 1.41 0zm6.96 0a6.5 6.5 0 0 1 0 8.37 1 1 0 0 1-1.41-1.41 4.5 4.5 0 0 0 0-5.54 1 1 0 0 1 1.41-1.42zM12.08 10.58a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>
+        </div>
+        <div
+          v-if="runningTasks[ws.name]?.length"
+          class="ws-task-spinner"
+          :title="'Running: ' + runningTasks[ws.name].join(', ')"
+        >
+          <svg class="sync-spin-icon" width="24" height="24" viewBox="-4 0 32 32" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M17.594 16h2.031c0-1.813-0.688-3.531-1.75-4.844h-0.031c-0.781-0.938-1.719-1.656-2.844-2.125-0.031 0-0.063-0.031-0.063-0.031-0.188-0.063-0.375-0.188-0.563-0.25-0.063 0-0.094-0.031-0.156-0.031-0.156-0.063-0.375-0.094-0.531-0.125-0.063-0.031-0.156-0.063-0.219-0.063-0.188-0.031-0.344-0.063-0.531-0.094h-0.188c-0.219-0.031-0.469-0.031-0.688-0.031-1.563-0.031-3.094 0.438-4.406 1.344-0.531 0.375-1.344 0.25-1.688-0.281-0.375-0.531-0.219-1.281 0.313-1.656 1.688-1.188 3.656-1.813 5.688-1.813 0.031 0 0.031-0.031 0.031-0.031 0.063 0 0.094 0.031 0.125 0.031 0.281 0 0.563 0 0.813 0.031 0.125 0 0.219 0.031 0.344 0.031 0.125 0.031 0.281 0.031 0.438 0.063 0.063 0 0.125 0.031 0.188 0.031 0.094 0.031 0.25 0.094 0.375 0.125 0.188 0.031 0.406 0.094 0.594 0.156 0.094 0.031 0.188 0.063 0.25 0.094 0.25 0.063 0.5 0.156 0.719 0.25 0.063 0 0.094 0.031 0.125 0.031 1.438 0.625 2.719 1.563 3.75 2.813 0 0.031 0.031 0.031 0.031 0.063 0.156 0.188 0.313 0.406 0.438 0.594 0.031 0 0.031 0.031 0.031 0.063 1.125 1.625 1.813 3.531 1.813 5.656h1.969l-3.188 4.781zM0 16l3.188-4.813 3.219 4.813h-2.031c0 1.781 0.656 3.406 1.719 4.719 0.031 0.031 0.031 0.063 0.063 0.094 0.156 0.188 0.313 0.375 0.469 0.531v0.031c0.5 0.5 1.094 0.938 1.719 1.281 0.031 0 0.031 0.031 0.031 0.031 0.188 0.094 0.406 0.188 0.594 0.25 0.031 0.031 0.094 0.063 0.125 0.063 0.156 0.063 0.313 0.125 0.5 0.188 0.063 0.031 0.125 0.063 0.219 0.063 0.125 0.063 0.313 0.094 0.469 0.125 0.094 0.031 0.188 0.031 0.281 0.063 0.156 0.031 0.313 0.063 0.469 0.063 0.094 0.031 0.156 0.031 0.25 0.031 0.188 0.031 0.438 0.031 0.625 0.031 1.594 0.031 3.125-0.438 4.438-1.375 0.531-0.344 1.344-0.188 1.688 0.344 0.375 0.531 0.219 1.281-0.313 1.656-1.688 1.188-3.656 1.813-5.688 1.813-0.031 0-0.031 0.031-0.031 0.031-0.063 0-0.094-0.031-0.125-0.031-0.25 0-0.531 0-0.813-0.031-0.031 0-0.094-0.031-0.125-0.031-0.125-0.031-0.281-0.063-0.438-0.063-0.063 0-0.125-0.031-0.188-0.031-0.094-0.031-0.25-0.094-0.375-0.125-0.031 0-0.094-0.031-0.125-0.031-0.219-0.063-0.406-0.125-0.594-0.188-0.063-0.031-0.156-0.063-0.219-0.094-0.25-0.094-0.5-0.219-0.719-0.313-0.063-0.031-0.094-0.031-0.125-0.063-1.469-0.688-2.75-1.688-3.781-2.906-0.031-0.031-0.031-0.063-0.063-0.094-1.063-1.313-1.688-2.938-1.688-4.719z"/></svg>
         </div>
       </div>
     </div>
@@ -1013,6 +1052,27 @@ body {
 .ws-live-btn:hover {
   background: color-mix(in srgb, var(--ws-color, #0078d4) 40%, white);
   border-color: rgba(255,255,255,0.4);
+}
+
+/* ── Running task spinner ─────────────────────────────── */
+.ws-task-spinner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  color: #8b949e;
+}
+
+.sync-spin-icon {
+  animation: sync-spin 3s linear infinite;
+}
+
+@keyframes sync-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* ── Active workspace banner ──────────────────────────── */

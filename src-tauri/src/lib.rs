@@ -46,6 +46,7 @@ pub struct TaskInfo {
     pub task_type: String,
     pub url: Option<String>,
     pub confirm_before_run: Option<bool>,
+    pub close_when_done: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -67,6 +68,8 @@ struct CodeSpaceSettings {
     url: Option<String>,
     #[serde(rename = "confirmationRequest")]
     confirmation_request: Option<bool>,
+    #[serde(rename = "closeWhenDone")]
+    close_when_done: Option<bool>,
 }
 
 /// Icon mapping: task-type → Lucide SVG path (24x24 viewBox, stroke-based)
@@ -1036,8 +1039,9 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
                     let task_type = t.code_space.as_ref().and_then(|cs| cs.task_type.clone()).unwrap_or_default();
                     let url = t.code_space.as_ref().and_then(|cs| cs.url.clone());
                     let confirm = t.code_space.as_ref().and_then(|cs| cs.confirmation_request);
+                    let close_when_done = t.code_space.as_ref().and_then(|cs| cs.close_when_done);
                     let icon = get_task_icon(&task_type).to_string();
-                    result.push(TaskInfo { label, command: cmd_name, args, cwd, icon, task_type, url, confirm_before_run: confirm });
+                    result.push(TaskInfo { label, command: cmd_name, args, cwd, icon, task_type, url, confirm_before_run: confirm, close_when_done });
                 }
             }
         }
@@ -1047,7 +1051,7 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
 }
 
 #[tauri::command]
-fn run_task(command: String, args: Vec<String>, cwd: Option<String>, task_type: String, workspace_name: String, url: Option<String>) -> Result<(), String> {
+fn run_task(app: tauri::AppHandle, command: String, args: Vec<String>, cwd: Option<String>, task_type: String, workspace_name: String, url: Option<String>, close_when_done: Option<bool>) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     const CREATE_NEW_CONSOLE: u32 = 0x00000010;
 
@@ -1059,32 +1063,94 @@ fn run_task(command: String, args: Vec<String>, cwd: Option<String>, task_type: 
     let task_type_clone = task_type.clone();
     let workspace_name_clone = workspace_name.clone();
     let url_clone = url.clone();
-    let spawn = move || -> Result<(), String> {
-        if args.is_empty() && command.contains(' ') {
-            let mut ps = Command::new("powershell");
-            ps.args(["-NoExit", "-Command", &command]);
-            ps.creation_flags(CREATE_NEW_CONSOLE);
-            if let Some(dir) = &cwd {
-                let resolved = dir.replace("${workspaceFolder}", &std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default());
-                ps.current_dir(&resolved);
-            }
-            ps.spawn().map_err(|e| format!("Failed: {}", e))?;
-        } else {
-            let mut cmd = Command::new("cmd");
-            cmd.arg("/k");
-            cmd.arg(&command);
-            for a in &args { cmd.arg(a); }
-            cmd.creation_flags(CREATE_NEW_CONSOLE);
-            if let Some(dir) = &cwd {
-                let resolved = dir.replace("${workspaceFolder}", &std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default());
-                cmd.current_dir(&resolved);
-            }
-            cmd.spawn().map_err(|e| format!("Failed: {}", e))?;
-        }
-        Ok(())
+    let task_type_wait = task_type.clone();
+    let workspace_name_wait = workspace_name.clone();
+    let app_wait = app.clone();
+    let close_when_done_val = close_when_done.unwrap_or(false);
+
+    // Marker file for closeWhenDone tasks (bypasses child.wait() which hangs with CREATE_NEW_CONSOLE)
+    let done_file = if close_when_done_val && task_type_wait != "live-server" {
+        let tmp = std::env::temp_dir();
+        let fname = format!("cs_done_{}_{}.tmp", workspace_name_wait, task_type_wait);
+        Some(tmp.join(fname))
+    } else {
+        None
     };
 
-    spawn()?;
+    // Spawn the child process
+    let mut child: Option<std::process::Child> = None;
+    if args.is_empty() && command.contains(' ') {
+        let mut ps = Command::new("powershell");
+        ps.args(["-NoExit", "-Command", &command]);
+        ps.creation_flags(CREATE_NEW_CONSOLE);
+        if let Some(dir) = &cwd {
+            let resolved = dir.replace("${workspaceFolder}", &std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default());
+            ps.current_dir(&resolved);
+        }
+        child = Some(ps.spawn().map_err(|e| format!("Failed: {}", e))?);
+    } else {
+        let mut cmd = Command::new("cmd");
+        cmd.arg("/k");
+        cmd.arg(&command);
+        for a in &args { cmd.arg(a); }
+        if let Some(ref df) = done_file {
+            cmd.env("CODESPACE_DONE_FILE", df.to_string_lossy().to_string());
+        }
+        cmd.creation_flags(CREATE_NEW_CONSOLE);
+        if let Some(dir) = &cwd {
+            let resolved = dir.replace("${workspaceFolder}", &std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default());
+            cmd.current_dir(&resolved);
+        }
+        child = Some(cmd.spawn().map_err(|e| format!("Failed: {}", e))?);
+    }
+
+    // Background: wait for task completion (non-live-server only)
+    if task_type_wait != "live-server" {
+        std::thread::spawn(move || {
+            if let Some(df) = done_file {
+                // Poll for marker file, fall back to process exit if window closed early
+                let pid = child.as_ref().map(|c| c.id());
+                eprintln!("[task-wait] polling marker: {} (pid={:?})", df.display(), pid);
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    // Check marker file
+                    if df.exists() {
+                        let _ = fs::remove_file(&df);
+                        eprintln!("[task-wait] marker found, emitting task-finished for {}", workspace_name_wait);
+                        let _ = app_wait.emit("task-finished", serde_json::json!({
+                            "workspaceName": workspace_name_wait,
+                            "taskType": task_type_wait,
+                        }));
+                        break;
+                    }
+                    // Check if process died (user closed terminal)
+                    if let Some(ref mut c) = child {
+                        match c.try_wait() {
+                            Ok(Some(status)) => {
+                                let _ = fs::remove_file(&df);
+                                eprintln!("[task-wait] process exited {:?}, emitting task-finished for {}", status, workspace_name_wait);
+                                let _ = app_wait.emit("task-finished", serde_json::json!({
+                                    "workspaceName": workspace_name_wait,
+                                    "taskType": task_type_wait,
+                                }));
+                                break;
+                            }
+                            Err(_) => break, // process gone
+                            _ => {} // still running, keep polling
+                        }
+                    }
+                }
+            } else if let Some(mut c) = child {
+                eprintln!("[task-wait] waiting for pid={}", c.id());
+                let status = c.wait();
+                eprintln!("[task-wait] pid done: {:?}, emitting task-finished for {}", status, workspace_name_wait);
+                let _ = app_wait.emit("task-finished", serde_json::json!({
+                    "workspaceName": workspace_name_wait,
+                    "taskType": task_type_wait,
+                }));
+            }
+        });
+    }
 
     // In background, find the new console window and position it to the right
     std::thread::spawn(move || {
