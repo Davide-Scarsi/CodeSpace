@@ -8,7 +8,7 @@
       "args": [
         "-NoProfile",
         "-Command",
-        "Get-Process CodeSpace -ErrorAction SilentlyContinue | Stop-Process -Force; Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force; npx tauri dev"
+        "Write-Host 'Killing previous processes...' -ForegroundColor Yellow; Get-Process CodeSpace,node,esbuild -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; Write-Host 'Cleaning temp build artifacts...' -ForegroundColor Yellow; if (Test-Path 'src-tauri/target/debug/deps/.tmp*') { Remove-Item -Recurse -Force 'src-tauri/target/debug/deps/.tmp*' -ErrorAction SilentlyContinue }; if (Test-Path 'src-tauri/target/debug/build') { Get-ChildItem 'src-tauri/target/debug/build' -Directory -Filter '.tmp*' -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue }; Write-Host 'Starting CodeSpace...' -ForegroundColor Green; npx tauri dev"
       ],
       "options": {
         "cwd": "${workspaceFolder}"

@@ -317,6 +317,32 @@ fn load_cache(app: &tauri::AppHandle) -> Option<Cache> {
     None
 }
 
+// ── JSONC support ────────────────────────────────────────────
+
+/// Strip // line comments from JSONC content so serde_json can parse it.
+fn strip_json_comments(content: &str) -> String {
+    content
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Read a .code-workspace file and parse it as JSON (strips comments first).
+fn read_workspace_json(ws_file: &Path) -> Option<serde_json::Value> {
+    let content = fs::read_to_string(ws_file).ok()?;
+    let cleaned = strip_json_comments(&content);
+    serde_json::from_str::<serde_json::Value>(&cleaned).ok()
+}
+
+/// Write JSON back to a .code-workspace file (always valid JSON, no comments).
+fn write_workspace_json(ws_file: &Path, json: &serde_json::Value) -> Result<(), String> {
+    let content = serde_json::to_string_pretty(json)
+        .map_err(|e| format!("Cannot serialize: {}", e))?;
+    fs::write(ws_file, &content)
+        .map_err(|e| format!("Cannot write workspace file: {}", e))
+}
+
 // ── Peacock Color ─────────────────────────────────────────────
 
 /// Read workspace color from .code-workspace file
@@ -324,13 +350,11 @@ fn read_workspace_color(workspace_path: &str) -> Option<String> {
     let ws_file = Path::new(workspace_path);
 
     // 2. .code-workspace file
-    if let Ok(content) = fs::read_to_string(ws_file) {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(settings) = json.get("settings") {
-                if let Some(wb) = settings.get("workbench.colorCustomizations") {
-                    if let Some(color) = extract_color_from_customizations(wb) {
-                        return Some(color);
-                    }
+    if let Some(json) = read_workspace_json(ws_file) {
+        if let Some(settings) = json.get("settings") {
+            if let Some(wb) = settings.get("workbench.colorCustomizations") {
+                if let Some(color) = extract_color_from_customizations(wb) {
+                    return Some(color);
                 }
             }
         }
@@ -545,18 +569,13 @@ fn set_workspace_color(workspace_path: String, color: String) -> Result<(), Stri
     let ws_file = Path::new(&workspace_path);
 
     // ── Write to .code-workspace file ──
-    if let Ok(content) = fs::read_to_string(ws_file) {
-        if let Ok(mut ws_json) = serde_json::from_str::<serde_json::Value>(&content) {
-            if ws_json.get("settings").is_none() {
-                ws_json["settings"] = serde_json::json!({});
-            }
-            let s = &mut ws_json["settings"];
-            write_full_color_overrides(s, &color);
-            let ws_content = serde_json::to_string_pretty(&ws_json)
-                .map_err(|e| format!("Cannot serialize: {}", e))?;
-            fs::write(ws_file, ws_content)
-                .map_err(|e| format!("Cannot write workspace file: {}", e))?;
+    if let Some(mut ws_json) = read_workspace_json(ws_file) {
+        if ws_json.get("settings").is_none() {
+            ws_json["settings"] = serde_json::json!({});
         }
+        let s = &mut ws_json["settings"];
+        write_full_color_overrides(s, &color);
+        write_workspace_json(ws_file, &ws_json)?;
     }
 
     Ok(())
@@ -622,15 +641,10 @@ fn remove_workspace_color(workspace_path: String) -> Result<(), String> {
     let ws_file = Path::new(&workspace_path);
 
     // 1. Remove from .code-workspace file
-    if let Ok(content) = fs::read_to_string(ws_file) {
-        if let Ok(mut ws_json) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(settings) = ws_json.get_mut("settings") {
-                settings.as_object_mut().map(|o| { o.remove("peacock.color"); o.remove("workbench.colorCustomizations"); });
-                let ws_content = serde_json::to_string_pretty(&ws_json)
-                    .map_err(|e| format!("Cannot serialize: {}", e))?;
-                fs::write(ws_file, ws_content)
-                    .map_err(|e| format!("Cannot write workspace file: {}", e))?;
-            }
+    if let Some(mut ws_json) = read_workspace_json(ws_file) {
+        if let Some(settings) = ws_json.get_mut("settings") {
+            settings.as_object_mut().map(|o| { o.remove("peacock.color"); o.remove("workbench.colorCustomizations"); });
+            write_workspace_json(ws_file, &ws_json)?;
         }
     }
 
@@ -973,15 +987,11 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
     let project_dir = ws_file.parent().unwrap_or(Path::new("."));
 
     // Resolve the first folder from the workspace to find the actual project root
-    let root = if let Ok(content) = fs::read_to_string(ws_file) {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(folders) = json.get("folders").and_then(|v| v.as_array()) {
-                if let Some(first) = folders.first() {
-                    if let Some(folder_path) = first.get("path").and_then(|v| v.as_str()) {
-                        project_dir.join(folder_path)
-                    } else {
-                        project_dir.to_path_buf()
-                    }
+    let root = if let Some(json) = read_workspace_json(ws_file) {
+        if let Some(folders) = json.get("folders").and_then(|v| v.as_array()) {
+            if let Some(first) = folders.first() {
+                if let Some(folder_path) = first.get("path").and_then(|v| v.as_str()) {
+                    project_dir.join(folder_path)
                 } else {
                     project_dir.to_path_buf()
                 }
