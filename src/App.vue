@@ -137,8 +137,8 @@ async function launchWorkspace(path: string, wsName: string) {
 async function focusWorkspace(name: string) {
   try {
     await invoke("focus_workspace", { name });
-    // Force update: backend confirmed focus, skip waiting for monitor poll
     debugActiveName.value = name;
+    isRealFocus.value = true;
   } catch (e) {
     statusMessage.value = `Focus error: ${e}`;
   }
@@ -147,8 +147,8 @@ async function focusWorkspace(name: string) {
 async function minimizeWorkspace(name: string) {
   try {
     await invoke("minimize_workspace", { name });
-    // Signal explicit clear — activeWorkspace will return null
     debugActiveName.value = "";
+    isRealFocus.value = false;
   } catch (e) {
     statusMessage.value = `Minimize error: ${e}`;
   }
@@ -157,7 +157,12 @@ async function minimizeWorkspace(name: string) {
 function handleRowClick(ws: WorkspaceInfo) {
   if (!ws.is_open) return;
   if (ws.name === activeWorkspace.value?.name) {
-    minimizeWorkspace(ws.name);
+    // If truly focused → minimize; if only "remembered" → bring to foreground
+    if (isRealFocus.value) {
+      minimizeWorkspace(ws.name);
+    } else {
+      focusWorkspace(ws.name);
+    }
   } else {
     focusWorkspace(ws.name);
   }
@@ -330,6 +335,7 @@ let unlistenLaunched: (() => void) | null = null;
 let unlistenLaunchFailed: (() => void) | null = null;
 const debugOpenNames = ref<string[]>([]);
 const debugActiveName = ref<string | null>(null);
+const isRealFocus = ref(false);
 const liveTerminals = ref<Record<string, number[]>>({});
 const runningTasks = ref<Record<string, string[]>>({});
 
@@ -357,11 +363,17 @@ onMounted(async () => {
     // Keep last active when CodeSpace has focus (scrolling etc.)
     if (active_name !== null) {
       debugActiveName.value = active_name;
+      isRealFocus.value = true;
     } else if (debugActiveName.value === "") {
       // User explicitly minimized — keep empty (no selection)
+      isRealFocus.value = false;
     } else if (debugActiveName.value && !open_names.includes(debugActiveName.value)) {
       // Last active was closed — clear
       debugActiveName.value = null;
+      isRealFocus.value = false;
+    } else {
+      // No active window (desktop, other app) — keep last known but mark as not real focus
+      isRealFocus.value = false;
     }
     workspaces.value.forEach((ws) => {
       ws.is_open = open_names.includes(ws.name);
