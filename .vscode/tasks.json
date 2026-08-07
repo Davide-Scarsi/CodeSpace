@@ -252,7 +252,7 @@
       "codeSpace": { "taskType": "add-user", "hidden": true }
     },
     {
-      "label": "🧪 Test Terminale (unit test)",
+      "label": "Test Terminale (unit test)",
       "detail": "Lancia il terminal-tester su tutte le task e verifica pattern",
       "type": "shell",
       "command": "powershell",

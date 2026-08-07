@@ -39,6 +39,7 @@ const scanInfo = ref({ has_cache: false, count: 0, last_scan: 0 });
 const scanning = ref(false);
 const searchQuery = ref("");
 const settingsView = ref(false);
+const updating = ref(false);
 const statusMessage = ref("");
 const dragOver = ref(false);
 
@@ -384,21 +385,23 @@ async function pickColor(color: string) {
 }
 
 async function reDownloadLatest() {
+  updating.value = true;
   statusMessage.value = "Checking for updates...";
   try {
     const release: any = await invoke("check_update");
     const latestTag = release.tag_name.replace("v", "");
-    const asset = release.assets.find((a: any) => a.name === "CodeSpace_Setup.exe");
+    const asset = release.assets.find((a: any) => a.name === "CodeSpace.exe");
     if (asset) {
       statusMessage.value = `Downloading v${latestTag}...`;
       await invoke("download_and_install", { url: asset.browser_download_url });
       statusMessage.value = `v${latestTag} downloaded. Restarting...`;
     } else {
-      statusMessage.value = "No installer found in latest release.";
+      statusMessage.value = "No executable found in latest release.";
     }
   } catch (e) {
     statusMessage.value = `Error: ${e}`;
   }
+  updating.value = false;
 }
 
 // ── FLIP animation for workspace reordering ──────────────
@@ -651,7 +654,9 @@ onUnmounted(() => {
       <div class="settings-section">
         <h3>Updates</h3>
         <p class="settings-desc">Current version: <strong>v{{ appVersion }}</strong></p>
-        <button class="btn btn-primary" @click="reDownloadLatest">Re-download latest version</button>
+        <button class="btn btn-primary" :disabled="updating" @click="reDownloadLatest">
+          {{ updating ? "Downloading..." : "Re-download latest version" }}
+        </button>
         <span v-if="statusMessage" class="status-bar" style="margin-top:8px;display:inline-block;position:static">{{ statusMessage }}</span>
       </div>
     </div>
