@@ -1259,6 +1259,15 @@ fn toggle_prompts_folder(workspace_path: String) -> Result<bool, String> {
     }
 }
 
+#[tauri::command]
+fn launch_url(url: String) -> Result<(), String> {
+    std::process::Command::new("cmd")
+        .args(["/c", "start", &url])
+        .spawn()
+        .map_err(|e| format!("Failed: {}", e))?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1286,6 +1295,7 @@ pub fn run() {
             terminal::terminal_spawn,
             terminal::terminal_write,
             terminal::terminal_kill,
+            launch_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

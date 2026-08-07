@@ -254,8 +254,9 @@ async function runTaskExecute(task: TaskItem) {
   try {
     const tabId = task.task_type + "-" + Date.now();
     const color = ws?.color || "#0078d4";
-    terminalTabs.value.push({ id: tabId, label: task.label, taskType: task.task_type || "default", color });
-    if (terminalTabs.value.length === 1) {
+    if (!terminalTabs.value[wsName]) terminalTabs.value[wsName] = [];
+    terminalTabs.value[wsName].push({ id: tabId, label: task.label, taskType: task.task_type || "default", color });
+    if (terminalTabs.value[wsName].length === 1) {
       try {
         const win = getCurrentWindow();
         const size = await win.outerSize();
@@ -264,6 +265,9 @@ async function runTaskExecute(task: TaskItem) {
     }
     console.log("[task] spawning terminal:", tabId, task.command, task.args);
     await invoke("terminal_spawn", { terminalId: tabId, command: task.command, args: task.args, cwd: task.cwd });
+    if (task.url) {
+      setTimeout(() => { invoke("launch_url", { url: task.url }).catch(() => {}); }, 2000);
+    }
     statusMessage.value = `Running: ${task.label}`;
   } catch (e) {
     statusMessage.value = `Error: ${e}`;
@@ -339,7 +343,7 @@ const debugActiveName = ref<string | null>(null);
 const isRealFocus = ref(false);
 const liveTerminals = ref<Record<string, number[]>>({});
 const runningTasks = ref<Record<string, string[]>>({});
-const terminalTabs = ref<TerminalTab[]>([]);
+const terminalTabs = ref<Record<string, TerminalTab[]>>({});
 
 async function toggleLiveTerminal(wsName: string) {
   const hwnds = liveTerminals.value[wsName];
@@ -415,10 +419,9 @@ onMounted(async () => {
     }
   });
 
-  // Listen for terminal-exit (clean up tab)
-  await listen<{ terminalId: string }>("terminal-exit", (event) => {
-    const idx = terminalTabs.value.findIndex(t => t.id === event.payload.terminalId);
-    if (idx !== -1) terminalTabs.value.splice(idx, 1);
+  // Listen for terminal-exit (just log, tab stays open)
+  await listen<{ terminalId: string }>("terminal-exit", (_event) => {
+    // Tab stays open so user can see output
   });
   // console.log("[DEBUG] listener set up");
 });
@@ -601,11 +604,11 @@ onUnmounted(() => {
         </div>
       </div>
       <TerminalPanel
-        :tabs="terminalTabs"
+        :tabs="terminalTabs[taskViewWsName || ''] || []"
         :activeColor="activeWorkspace?.color || '#0078d4'"
         :taskIcon="''"
         :taskType="''"
-        @close-tab="(id: string) => { const i = terminalTabs.findIndex(t => t.id === id); if (i !== -1) { invoke('terminal_kill', { terminalId: id }); terminalTabs.splice(i, 1); } }"
+        @close-tab="(id: string) => { const wsKey = taskViewWsName || ''; const arr = terminalTabs[wsKey]; if (arr) { const i = arr.findIndex(t => t.id === id); if (i !== -1) { invoke('terminal_kill', { terminalId: id }); arr.splice(i, 1); if (arr.length === 0) delete terminalTabs[wsKey]; } } }"
         @select-tab="() => {}"
       />
     </div>
