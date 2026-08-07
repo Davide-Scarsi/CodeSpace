@@ -40,7 +40,7 @@ watch(() => props.tabs, async (tabs) => {
     activeTabId.value = null;
     if (term) { term.dispose(); term = null; }
   }
-}, { immediate: true, deep: true });
+}, { immediate: true });
 
 watch(activeTabId, async (id) => {
   if (!id) return;

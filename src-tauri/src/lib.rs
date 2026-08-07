@@ -489,6 +489,14 @@ extern "system" {
     fn FindWindowW(class: *const u16, title: *const u16) -> isize;
     fn GetWindowRect(hwnd: isize, rect: *mut Rect) -> i32;
     fn SetWindowPos(hwnd: isize, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
+    fn GetClassNameW(hwnd: isize, buf: *mut u16, max: i32) -> i32;
+    fn GetWindowThreadProcessId(hwnd: isize, pid: *mut u32) -> u32;
+    fn GetCurrentThreadId() -> u32;
+    fn AttachThreadInput(idAttach: u32, idAttachTo: u32, fAttach: i32) -> i32;
+    fn BringWindowToTop(hwnd: isize) -> i32;
+    fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
+    fn QueryFullProcessImageNameW(handle: isize, flags: u32, buf: *mut u16, size: *mut u32) -> i32;
+    fn CloseHandle(handle: isize) -> i32;
 }
 
 #[cfg(windows)]
@@ -1268,59 +1276,83 @@ fn launch_url(url: String) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(windows)]
 #[tauri::command]
 fn focus_browser(url: String) -> Result<(), String> {
-    static CACHE: Mutex<Option<HashMap<String, isize>>> = Mutex::new(None);
-
-    fn init_cache() {
-        let mut g = CACHE.lock().unwrap();
-        if g.is_none() { *g = Some(HashMap::new()); }
-    }
-
-    init_cache();
-
-    // 1. Try cached HWND first
-    {
-        let cache = CACHE.lock().unwrap();
-        if let Some(hwnd) = cache.as_ref().unwrap().get(&url) {
-            let h = *hwnd;
-            drop(cache);
-            unsafe {
-                if IsWindow(h) != 0 && IsWindowVisible(h) != 0 {
-                    if IsIconic(h) != 0 { ShowWindow(h, 9); }
-                    SetForegroundWindow(h);
-                    return Ok(());
-                }
-            }
-            CACHE.lock().unwrap().as_mut().unwrap().remove(&url);
-        }
-    }
-
-    // 2. Launch URL, then capture the browser HWND from foreground
-    let _ = std::process::Command::new("cmd")
-        .args(["/c", "start", "", &url])
-        .spawn();
-
-    // Wait for browser to open and take focus
-    std::thread::sleep(std::time::Duration::from_millis(2000));
-
-    // The browser should now be the foreground window
-    unsafe {
-        let fg = GetForegroundWindow();
-        if fg != 0 && IsWindow(fg) != 0 {
-            CACHE.lock().unwrap().as_mut().unwrap().insert(url.clone(), fg);
-        }
-    }
-
-    Ok(())
+    launch_url(url)
 }
 
-#[cfg(not(windows))]
 #[tauri::command]
-fn focus_browser(url: String) -> Result<(), String> {
-    // Non-Windows: just open URL
-    launch_url(url)
+fn focus_any_browser() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let cs_pid = unsafe { std::process::id() };
+        let cs_tid = unsafe { GetCurrentThreadId() };
+
+        unsafe fn is_browser(pid: u32) -> bool {
+            let h = OpenProcess(0x1000, 0, pid);
+            if h == 0 { return false; }
+            let mut buf = [0u16; 260];
+            let mut size: u32 = 260;
+            let ok = QueryFullProcessImageNameW(h, 0, buf.as_mut_ptr(), &mut size);
+            CloseHandle(h);
+            if ok == 0 { return false; }
+            let name = String::from_utf16_lossy(&buf[..size as usize]).to_lowercase();
+            name.ends_with("\\chrome.exe") || name.ends_with("\\msedge.exe") || name.ends_with("\\firefox.exe") || name.ends_with("\\brave.exe") || name.ends_with("\\opera.exe")
+        }
+
+        struct Ctx { cs_pid: u32, found: isize, found_tid: u32, found_title: String, skipped_self: i32, skipped_notitle: i32, skipped_notbrowser: i32 }
+
+        unsafe extern "system" fn enum_cb(hwnd: isize, lparam: isize) -> i32 {
+            let ctx = &mut *(lparam as *mut Ctx);
+            if IsWindowVisible(hwnd) == 0 { return 1; }
+            if IsWindow(hwnd) == 0 { return 1; }
+            let mut pid: u32 = 0;
+            let tid = GetWindowThreadProcessId(hwnd, &mut pid);
+            if pid == ctx.cs_pid { ctx.skipped_self += 1; return 1; }
+            let mut title_buf = [0u16; 128];
+            let title_len = GetWindowTextW(hwnd, title_buf.as_mut_ptr(), 127);
+            if title_len <= 0 { ctx.skipped_notitle += 1; return 1; }
+            let mut buf = [0u16; 64];
+            let len = GetClassNameW(hwnd, buf.as_mut_ptr(), 63);
+            if len <= 0 { return 1; }
+            let class = String::from_utf16_lossy(&buf[..len as usize]);
+            if class == "Chrome_WidgetWin_1" || class == "MozillaWindowClass" {
+                if !is_browser(pid) { ctx.skipped_notbrowser += 1; return 1; }
+                let title = String::from_utf16_lossy(&title_buf[..title_len as usize]);
+                // Must look like a browser tab: ends with " - BrowserName"
+                let is_browser_title = title.ends_with(" - Google Chrome")
+                    || title.ends_with(" - Microsoft Edge")
+                    || title.ends_with(" - Mozilla Firefox")
+                    || title.ends_with(" - Brave")
+                    || title.ends_with(" - Opera")
+                    || title.contains(" - ") && (title.contains("Chrome") || title.contains("Edge") || title.contains("Firefox") || title.contains("Brave") || title.contains("Opera"));
+                if !is_browser_title { return 1; }
+                ctx.found = hwnd;
+                ctx.found_tid = tid;
+                ctx.found_title = title;
+                return 0;
+            }
+            1
+        }
+
+        let mut ctx = Ctx { cs_pid, found: 0, found_tid: 0, found_title: String::new(), skipped_self: 0, skipped_notitle: 0, skipped_notbrowser: 0 };
+        unsafe { EnumWindows(enum_cb, &mut ctx as *mut Ctx as isize); }
+
+        if ctx.found != 0 {
+            unsafe {
+                let attached = AttachThreadInput(cs_tid, ctx.found_tid, 1);
+                if IsIconic(ctx.found) != 0 { ShowWindow(ctx.found, 9); }
+                BringWindowToTop(ctx.found);
+                SetForegroundWindow(ctx.found);
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                if attached != 0 { AttachThreadInput(cs_tid, ctx.found_tid, 0); }
+                return Ok(());
+            }
+        }
+        Err("No browser window found".into())
+    }
+    #[cfg(not(windows))]
+    Err("not windows".into())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1352,6 +1384,7 @@ pub fn run() {
             terminal::terminal_kill,
             launch_url,
             focus_browser,
+            focus_any_browser,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

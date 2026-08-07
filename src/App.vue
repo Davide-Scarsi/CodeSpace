@@ -183,6 +183,15 @@ const tasks = ref<TaskItem[]>([]);
 const confirmModalVisible = ref(false);
 const confirmModalTask = ref<TaskItem | null>(null);
 
+// Synchronized pulse phase for live-server icons (0..1)
+const pulsePhase = ref(0);
+let pulseRaf: number | null = null;
+
+// Track URLs already launched (to avoid duplicate tabs)
+const launchedUrls = new Set<string>();
+// Cached empty array to avoid creating new refs on every render
+const EMPTY_TABS: TerminalTab[] = [];
+
 // Track missing custom icons to fallback to built-in path icon
 const missingIcons = ref(new Set<string>());
 function iconLoadError(taskType: string | undefined) {
@@ -286,7 +295,11 @@ async function runTaskExecute(task: TaskItem) {
     console.log("[task] spawning terminal:", tabId, task.command, task.args);
     await invoke("terminal_spawn", { terminalId: tabId, command: task.command, args: task.args, cwd: task.cwd });
     if (task.url) {
-      setTimeout(() => { invoke("focus_browser", { url: task.url }).catch(() => {}); }, 2000);
+      const url = task.url;
+      setTimeout(() => {
+        launchedUrls.add(url);
+        invoke("launch_url", { url }).catch(() => {});
+      }, 2000);
     }
     statusMessage.value = `Running: ${task.label}`;
   } catch (e) {
@@ -375,12 +388,33 @@ async function toggleLiveTerminal(wsName: string) {
 function openLiveUrl(wsName: string) {
   const tabs = terminalTabs.value[wsName] || [];
   const liveTab = tabs.find(t => t.taskType === "live-server" && t.url);
-  if (liveTab?.url) {
-    invoke("focus_browser", { url: liveTab.url }).catch(() => {});
+  if (!liveTab?.url) return;
+  const url = liveTab.url;
+  if (launchedUrls.has(url)) {
+    invoke("focus_any_browser").catch(() => {
+      launchedUrls.delete(url);
+      invoke("launch_url", { url }).catch(() => {});
+      launchedUrls.add(url);
+    });
+  } else {
+    launchedUrls.add(url);
+    invoke("launch_url", { url }).catch(() => {});
   }
 }
 
 onMounted(async () => {
+  // Synchronized pulse animation loop
+  const PULSE_MS = 5000;
+  const tick = () => {
+    const phase = (Date.now() % PULSE_MS) / PULSE_MS;
+    pulsePhase.value = phase;
+    // CSS custom properties for pseudo-elements that can't use inline styles
+    const s = Math.sin(phase * Math.PI * 2);
+    document.documentElement.style.setProperty('--pulse-opacity', String(0.65 + 0.35 * s));
+    pulseRaf = requestAnimationFrame(tick);
+  };
+  pulseRaf = requestAnimationFrame(tick);
+
   setupDragDrop();
   await loadScanInfo();
   if (scanInfo.value.has_cache) {
@@ -466,6 +500,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  if (pulseRaf !== null) cancelAnimationFrame(pulseRaf);
   if (unlisten) unlisten();
   if (unlistenWs) unlistenWs();
   if (unlistenLaunched) unlistenLaunched();
@@ -531,7 +566,7 @@ onUnmounted(() => {
     <div v-if="activeWorkspace" class="active-banner" :style="{ '--ws-color': activeWorkspace.color || '#0078d4' }">
       <span class="banner-live-slot">
         <button
-          v-if="liveTerminals[activeWorkspace.name]?.length || (terminalTabs[activeWorkspace.name] || []).some(t => t.taskType === 'live-server')"
+          v-if="liveTerminals[activeWorkspace.name]?.length || (terminalTabs[activeWorkspace.name] || EMPTY_TABS).some(t => t.taskType === 'live-server')"
           class="banner-live-icon"
           title="Toggle live server terminal"
           @click="toggleLiveTerminal(activeWorkspace.name)"
@@ -601,21 +636,21 @@ onUnmounted(() => {
           <svg class="sync-spin-icon" width="32" height="32" viewBox="-4 0 32 32" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M17.594 16h2.031c0-1.813-0.688-3.531-1.75-4.844h-0.031c-0.781-0.938-1.719-1.656-2.844-2.125-0.031 0-0.063-0.031-0.063-0.031-0.188-0.063-0.375-0.188-0.563-0.25-0.063 0-0.094-0.031-0.156-0.031-0.156-0.063-0.375-0.094-0.531-0.125-0.063-0.031-0.156-0.063-0.219-0.063-0.188-0.031-0.344-0.063-0.531-0.094h-0.188c-0.219-0.031-0.469-0.031-0.688-0.031-1.563-0.031-3.094 0.438-4.406 1.344-0.531 0.375-1.344 0.25-1.688-0.281-0.375-0.531-0.219-1.281 0.313-1.656 1.688-1.188 3.656-1.813 5.688-1.813 0.031 0 0.031-0.031 0.031-0.031 0.063 0 0.094 0.031 0.125 0.031 0.281 0 0.563 0 0.813 0.031 0.125 0 0.219 0.031 0.344 0.031 0.125 0.031 0.281 0.031 0.438 0.063 0.063 0 0.125 0.031 0.188 0.031 0.094 0.031 0.25 0.094 0.375 0.125 0.188 0.031 0.406 0.094 0.594 0.156 0.094 0.031 0.188 0.063 0.25 0.094 0.25 0.063 0.5 0.156 0.719 0.25 0.063 0 0.094 0.031 0.125 0.031 1.438 0.625 2.719 1.563 3.75 2.813 0 0.031 0.031 0.031 0.031 0.063 0.156 0.188 0.313 0.406 0.438 0.594 0.031 0 0.031 0.031 0.031 0.063 1.125 1.625 1.813 3.531 1.813 5.656h1.969l-3.188 4.781zM0 16l3.188-4.813 3.219 4.813h-2.031c0 1.781 0.656 3.406 1.719 4.719 0.031 0.031 0.031 0.063 0.063 0.094 0.156 0.188 0.313 0.375 0.469 0.531v0.031c0.5 0.5 1.094 0.938 1.719 1.281 0.031 0 0.031 0.031 0.031 0.031 0.188 0.094 0.406 0.188 0.594 0.25 0.031 0.031 0.094 0.063 0.125 0.063 0.156 0.063 0.313 0.125 0.5 0.188 0.063 0.031 0.125 0.063 0.219 0.063 0.125 0.063 0.313 0.094 0.469 0.125 0.094 0.031 0.188 0.031 0.281 0.063 0.156 0.031 0.313 0.063 0.469 0.063 0.094 0.031 0.156 0.031 0.25 0.031 0.188 0.031 0.438 0.031 0.625 0.031 1.594 0.031 3.125-0.438 4.438-1.375 0.531-0.344 1.344-0.188 1.688 0.344 0.375 0.531 0.219 1.281-0.313 1.656-1.688 1.188-3.656 1.813-5.688 1.813-0.031 0-0.031 0.031-0.031 0.031-0.063 0-0.094-0.031-0.125-0.031-0.25 0-0.531 0-0.813-0.031-0.031 0-0.094-0.031-0.125-0.031-0.125-0.031-0.281-0.063-0.438-0.063-0.063 0-0.125-0.031-0.188-0.031-0.094-0.031-0.25-0.094-0.375-0.125-0.031 0-0.094-0.031-0.125-0.031-0.219-0.063-0.406-0.125-0.594-0.188-0.063-0.031-0.156-0.063-0.219-0.094-0.25-0.094-0.5-0.219-0.719-0.313-0.063-0.031-0.094-0.031-0.125-0.063-1.469-0.688-2.75-1.688-3.781-2.906-0.031-0.031-0.031-0.063-0.063-0.094-1.063-1.313-1.688-2.938-1.688-4.719z"/></svg>
         </div>
         <button
-          v-if="(liveTerminals[ws.name]?.length || (terminalTabs[ws.name] || []).some(t => t.taskType === 'live-server'))"
+          v-if="(liveTerminals[ws.name]?.length || (terminalTabs[ws.name] || EMPTY_TABS).some(t => t.taskType === 'live-server'))"
           class="ws-btn ws-live-icon"
-          :style="{ color: ws.color || '#58a6ff' }"
+          :style="{ color: ws.color || '#58a6ff', opacity: 0.65 + 0.15 * Math.sin(pulsePhase * Math.PI * 2) }"
           title="Open live server in browser"
           @click.stop="openLiveUrl(ws.name)"
         >
           <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M6.34 4.94a1 1 0 0 1 0 1.41 8.5 8.5 0 0 0 0 11.32 1 1 0 0 1-1.41 1.41C1.02 15.18 1.02 8.85 4.93 4.94a1 1 0 0 1 1.41 0zm12.73 0c3.9 3.9 3.9 10.24 0 14.14a1 1 0 0 1-1.41-1.41 8.5 8.5 0 0 0 0-11.32 1 1 0 0 1 1.41-1.41zM9.31 7.81a1 1 0 0 1 0 1.42 4.5 4.5 0 0 0 0 5.54 1 1 0 0 1-1.41 1.41 6.5 6.5 0 0 1 0-8.37 1 1 0 0 1 1.41 0zm6.96 0a6.5 6.5 0 0 1 0 8.37 1 1 0 0 1-1.41-1.41 4.5 4.5 0 0 0 0-5.54 1 1 0 0 1 1.41-1.42zM12.08 10.58a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>
         </button>
         <div
-          v-if="(terminalTabs[ws.name] || []).length"
+          v-if="(terminalTabs[ws.name] || EMPTY_TABS).length"
           class="ws-term-count"
           :title="terminalTabs[ws.name].length + ' terminal(s) open'"
           :style="{ color: ws.color || '#8b949e' }"
         >
-          <span class="ws-term-num">{{ (terminalTabs[ws.name] || []).length }}</span>
+          <span class="ws-term-num">{{ (terminalTabs[ws.name] || EMPTY_TABS).length }}</span>
           <svg width="32" height="32" viewBox="0 0 24 24" :fill="ws.color || '#8b949e'" xmlns="http://www.w3.org/2000/svg"><path d="M21.5 3h-19A1.504 1.504 0 0 0 1 4.5v15A1.5 1.5 0 0 0 2.5 21h19a1.5 1.5 0 0 0 1.5-1.5v-15A1.504 1.504 0 0 0 21.5 3zm.5 16.5a.501.501 0 0 1-.5.5h-19a.501.501 0 0 1-.5-.5v-15a.506.506 0 0 1 .5-.5h19a.506.506 0 0 1 .5.5zM5.354 15.354l-.707-.707L7.793 11.5 4.646 8.354l.707-.707L9.207 11.5zM15 15h-5v-1h5z"/></svg>
         </div>
       </div>
@@ -651,7 +686,7 @@ onUnmounted(() => {
         </div>
       </div>
       <TerminalPanel
-        :tabs="terminalTabs[taskViewWsName || ''] || []"
+        :tabs="terminalTabs[taskViewWsName || ''] || EMPTY_TABS"
         :activeColor="activeWorkspace?.color || '#0078d4'"
         :taskIcon="''"
         :taskType="''"
@@ -1276,12 +1311,7 @@ body {
   inset: 0;
   border-radius: 8px;
   background: color-mix(in srgb, var(--ws-color) 25%, #000);
-  animation: live-pulse 4s ease-in-out infinite;
-}
-
-@keyframes live-pulse {
-  0%, 100% { opacity: 0.25; }
-  50% { opacity: 0.75; }
+  opacity: var(--pulse-opacity, 0.5);
 }
 
 .ws-btn {
@@ -1305,12 +1335,7 @@ body {
 }
 
 .ws-live-icon {
-  animation: live-icon-pulse 3s ease-in-out infinite;
-}
-
-@keyframes live-icon-pulse {
-  0%, 100% { opacity: 0.5; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.15); }
+  transition: none;
 }
 
 .ws-btn-launch:hover {
