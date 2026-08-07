@@ -1,3 +1,5 @@
+#![allow(linker_messages)]
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -453,6 +455,7 @@ extern "system" {
     fn SetForegroundWindow(hwnd: isize) -> i32;
     fn ShowWindow(hwnd: isize, cmd: i32) -> i32;
     fn IsIconic(hwnd: isize) -> i32;
+    #[allow(dead_code)]
     fn FindWindowW(class: *const u16, title: *const u16) -> isize;
     fn GetWindowRect(hwnd: isize, rect: *mut Rect) -> i32;
     fn SetWindowPos(hwnd: isize, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
@@ -1074,7 +1077,7 @@ fn run_task(command: String, args: Vec<String>, cwd: Option<String>, task_type: 
 
     // In background, find the new console window and position it to the right
     std::thread::spawn(move || {
-        for i in 0..40 { // 40 * 150ms = 6 seconds
+        for _i in 0..40 { // 40 * 150ms = 6 seconds
             std::thread::sleep(std::time::Duration::from_millis(150));
             unsafe {
                 let hwnd = GetForegroundWindow();
