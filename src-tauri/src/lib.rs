@@ -74,10 +74,12 @@ fn get_task_icon(task_type: &str) -> &str {
         "php-server" => "M12 2 2 7l10 5 10-5-10-5z M2 17l10 5 10-5 M2 12l10 5 10-5",
         "npm" => "M12 2l10 5v10l-10 5-10-5V7z M12 22V12 M4 7l8 4 8-4",
         "echo" => "M4 6h16 M4 12h10 M4 18h8",
-            "add-user" => include_str!("../../public/icons/add-user.svg"),
+        "ftp-mount" => "M64 160h896v576H64V160zm160 128h576v256H224V288zm192 448h256v128H416v-128z",
+        "upload" => "M256 608h512v128H256v-128zm256-320l-128 160h80v128h96V448h80l-128-160z",
+        "add-user" => "M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10z M4 20c0-4.42 3.58-8 8-8s8 3.58 8 8",
         "test" => "M8 2v6a6 6 0 0 0 8 0V2 M6 14h12 M10 18h4",
         "powershell" => "M4 17l6-6-6-6 M12 19h8",
-        _ => "M5 3l14 9-14 9V3z", // default: play triangle
+        _ => "M9 8L5 11.6923L9 16M15 8L19 11.6923L15 16", // default: generic double-arrow
     }
 }
 
