@@ -2,9 +2,11 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import VscodeIcon from "./components/VscodeIcon.vue";
 import UpdateBanner from "./components/UpdateBanner.vue";
+import TerminalPanel from "./components/TerminalPanel.vue";
+import type { TerminalTab } from "./components/TerminalPanel.vue";
 import { useWorkspaceFlip } from "./utils/useWorkspaceFlip";
 
 declare const __APP_VERSION__: string;
@@ -243,30 +245,34 @@ async function toggleTaskView(ws: WorkspaceInfo) {
 async function runTaskExecute(task: TaskItem) {
   const ws = activeWorkspace.value;
   const wsName = ws?.name || "";
-  // Track non-live-server tasks for spinner
-  if (task.task_type && task.task_type !== "live-server") {
+  const isBackground = task.task_type === "live-server" || task.task_type === "php-server";
+  if (task.task_type && !isBackground) {
     if (!runningTasks.value[wsName]) runningTasks.value[wsName] = [];
     if (!runningTasks.value[wsName].includes(task.task_type)) {
       runningTasks.value[wsName].push(task.task_type);
-      console.log("[task-start] tracking:", wsName, task.task_type, "closeWhenDone:", task.close_when_done);
     }
   }
   try {
-    await invoke("run_task", { command: task.command, args: task.args, cwd: task.cwd, taskType: task.task_type, workspaceName: wsName, url: task.url, closeWhenDone: task.close_when_done ?? false });
+    if (isBackground) {
+      await invoke("run_task", { command: task.command, args: task.args, cwd: task.cwd, taskType: task.task_type, workspaceName: wsName, url: task.url, closeWhenDone: false });
+    } else {
+      const tabId = task.task_type + "-" + Date.now();
+      const color = ws?.color || "#0078d4";
+      terminalTabs.value.push({ id: tabId, label: task.label, taskType: task.task_type || "default", color });
+      if (terminalTabs.value.length === 1) {
+        try {
+          const win = getCurrentWindow();
+          const size = await win.outerSize();
+          await win.setSize(new LogicalSize(size.width * 2, size.height));
+        } catch (_) {}
+      }
+      console.log("[task] spawning terminal:", tabId, task.command, task.args);
+      await invoke("terminal_spawn", { terminalId: tabId, command: task.command, args: task.args, cwd: task.cwd });
+    }
     statusMessage.value = `Running: ${task.label}`;
   } catch (e) {
     statusMessage.value = `Error: ${e}`;
-    // Clean up on error
-    if (task.task_type && task.task_type !== "live-server") {
-      const arr = runningTasks.value[wsName];
-      if (arr) {
-        runningTasks.value[wsName] = arr.filter(t => t !== task.task_type);
-        if (runningTasks.value[wsName].length === 0) delete runningTasks.value[wsName];
-      }
-    }
   }
-  taskView.value = false;
-  taskViewWsName.value = null;
 }
 
 function runTask(task: TaskItem) {
@@ -338,6 +344,7 @@ const debugActiveName = ref<string | null>(null);
 const isRealFocus = ref(false);
 const liveTerminals = ref<Record<string, number[]>>({});
 const runningTasks = ref<Record<string, string[]>>({});
+const terminalTabs = ref<TerminalTab[]>([]);
 
 async function toggleLiveTerminal(wsName: string) {
   const hwnds = liveTerminals.value[wsName];
@@ -411,6 +418,12 @@ onMounted(async () => {
         delete runningTasks.value[workspaceName];
       }
     }
+  });
+
+  // Listen for terminal-exit (clean up tab)
+  await listen<{ terminalId: string }>("terminal-exit", (event) => {
+    const idx = terminalTabs.value.findIndex(t => t.id === event.payload.terminalId);
+    if (idx !== -1) terminalTabs.value.splice(idx, 1);
   });
   // console.log("[DEBUG] listener set up");
 });
@@ -563,33 +576,43 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Task View -->
-    <div v-if="taskView" class="list-container">
-      <div v-if="tasks.length === 0" class="empty-state">
-        <p>No shell tasks found in this workspace.</p>
-      </div>
-      <div
-        v-for="t in tasks"
-        :key="t.label"
-        class="ws-card"
-        @click="runTask(t)"
-      >
-        <div class="ws-icon">
-          <img
-            v-if="t.task_type && !missingIcons.has(t.task_type)"
-            :src="`/icons/${t.task_type}.svg`"
-            width="28"
-            height="28"
-            alt=""
-            @error="() => iconLoadError(t.task_type)"
-          />
-          <svg v-else width="28" height="28" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path :d="t.icon"/></svg>
+    <!-- Task View + Terminal Split -->
+    <div v-show="taskView" class="task-split">
+      <div class="task-list-panel">
+        <div v-if="tasks.length === 0" class="empty-state">
+          <p>No shell tasks found in this workspace.</p>
         </div>
-        <div class="ws-info">
-          <span class="ws-name">{{ t.label }}</span>
-          <span v-if="t.task_type === 'live-server'" class="ws-path">live-server</span>
+        <div
+          v-for="t in tasks"
+          :key="t.label"
+          class="ws-card"
+          @click="runTask(t)"
+        >
+          <div class="ws-icon">
+            <img
+              v-if="t.task_type && !missingIcons.has(t.task_type)"
+              :src="`/icons/${t.task_type}.svg`"
+              width="28"
+              height="28"
+              alt=""
+              @error="() => iconLoadError(t.task_type)"
+            />
+            <svg v-else width="28" height="28" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path :d="t.icon"/></svg>
+          </div>
+          <div class="ws-info">
+            <span class="ws-name">{{ t.label }}</span>
+            <span v-if="t.task_type === 'live-server'" class="ws-path">live-server</span>
+          </div>
         </div>
       </div>
+      <TerminalPanel
+        :tabs="terminalTabs"
+        :activeColor="activeWorkspace?.color || '#0078d4'"
+        :taskIcon="''"
+        :taskType="''"
+        @close-tab="(id: string) => { const i = terminalTabs.findIndex(t => t.id === id); if (i !== -1) { invoke('terminal_kill', { terminalId: id }); terminalTabs.splice(i, 1); } }"
+        @select-tab="() => {}"
+      />
     </div>
 
     <!-- Footer -->
@@ -856,6 +879,24 @@ body {
   background: #161b22;
   border-bottom: 1px solid #21262d;
   flex-shrink: 0;
+}
+
+/* ── Task + Terminal Split ────────────────────────────── */
+.task-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.task-list-panel {
+  width: 320px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 4px 8px;
+  border-right: 1px solid #3c3c3c;
+  scrollbar-width: auto;
+  scrollbar-color: #484f58 #161b22;
 }
 
 /* ── List container ───────────────────────────────────── */

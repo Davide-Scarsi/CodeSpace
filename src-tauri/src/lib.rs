@@ -1,6 +1,8 @@
 #![allow(linker_messages)]
 
 use serde::{Deserialize, Serialize};
+
+mod terminal;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -1078,7 +1080,7 @@ fn run_task(app: tauri::AppHandle, command: String, args: Vec<String>, cwd: Opti
     };
 
     // Spawn the child process
-    let mut child: Option<std::process::Child> = None;
+    let mut child: Option<std::process::Child>;
     if args.is_empty() && command.contains(' ') {
         let mut ps = Command::new("powershell");
         ps.args(["-NoExit", "-Command", &command]);
@@ -1281,6 +1283,9 @@ pub fn run() {
             get_workspace_tasks,
             run_task,
             toggle_live_terminal,
+            terminal::terminal_spawn,
+            terminal::terminal_write,
+            terminal::terminal_kill,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

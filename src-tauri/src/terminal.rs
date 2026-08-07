@@ -1,0 +1,50 @@
+﻿use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Command, Stdio};
+use std::sync::Mutex;
+use tauri::Emitter;
+
+struct TermSession { stdin: Mutex<Box<dyn Write + Send>>, }
+static TERMINALS: Mutex<Option<HashMap<String, TermSession>>> = Mutex::new(None);
+fn init_terminals() { let mut g = TERMINALS.lock().unwrap(); if g.is_none() { *g = Some(HashMap::new()); } }
+
+#[tauri::command]
+pub fn terminal_spawn(app: tauri::AppHandle, terminal_id: String, command: String, mut args: Vec<String>, cwd: Option<String>) -> Result<(), String> {
+    eprintln!("[term] spawn id={} cmd={} args={:?}", terminal_id, command, args);
+    let is_ps = command.eq_ignore_ascii_case("powershell") || command.eq_ignore_ascii_case("pwsh");
+    if is_ps && !args.is_empty() {
+        let last = args.len() - 1;
+        args[last] = format!("{} *>&1", args[last]);
+    }
+    let mut cmd = Command::new(&command);
+    for a in &args { cmd.arg(a); }
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).stdin(Stdio::piped());
+    if let Some(ref dir) = cwd { cmd.current_dir(dir); }
+    let mut child = cmd.spawn().map_err(|e| format!("Spawn: {}", e))?;
+    eprintln!("[term] spawned pid={}", child.id());
+    let stdout = child.stdout.take().ok_or("No stdout")?;
+    let stderr = child.stderr.take().ok_or("No stderr")?;
+    let stdin = child.stdin.take().ok_or("No stdin")?;
+    let tid = terminal_id.clone(); let a = app.clone();
+    std::thread::spawn(move || { let _ = child.wait(); eprintln!("[term] exit {}", tid); let _ = a.emit("terminal-exit", serde_json::json!({"terminalId":tid})); });
+    let tid2 = terminal_id.clone(); let a2 = app.clone();
+    std::thread::spawn(move || { for line in BufReader::new(stdout).lines().flatten() { eprintln!("[term] out {}: {}", tid2, &line[..std::cmp::min(80,line.len())]); let _ = a2.emit("terminal-output", serde_json::json!({"terminalId":tid2,"data":line+"\r\n"})); } eprintln!("[term] stdout eof {}", tid2); });
+    let tid3 = terminal_id.clone(); let a3 = app.clone();
+    std::thread::spawn(move || { for line in BufReader::new(stderr).lines().flatten() { eprintln!("[term] err {}: {}", tid3, &line[..std::cmp::min(80,line.len())]); let _ = a3.emit("terminal-output", serde_json::json!({"terminalId":tid3,"data":line+"\r\n"})); } });
+    init_terminals(); TERMINALS.lock().unwrap().as_mut().unwrap().insert(terminal_id, TermSession{stdin:Mutex::new(Box::new(stdin))});
+    Ok(())
+}
+
+#[tauri::command]
+pub fn terminal_write(terminal_id: String, data: String) -> Result<(), String> {
+    let g = TERMINALS.lock().unwrap(); let t = g.as_ref().ok_or("No terminals")?;
+    let s = t.get(&terminal_id).ok_or("Not found")?;
+    s.stdin.lock().unwrap().write_all(data.as_bytes()).map_err(|e| format!("Write: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn terminal_kill(terminal_id: String) -> Result<(), String> {
+    init_terminals(); TERMINALS.lock().unwrap().as_mut().unwrap().remove(&terminal_id);
+    Ok(())
+}
