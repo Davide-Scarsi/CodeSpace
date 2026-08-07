@@ -54,7 +54,28 @@ watch(activeTabId, async (id) => {
   term = new Terminal({
     cursorBlink: true, fontSize: 13,
     fontFamily: "Consolas, 'Courier New', monospace",
-    theme: { background: "#1e1e1e", foreground: "#d4d4d4", cursor: "#ffffff", selectionBackground: "#264f78" },
+    theme: {
+      background: "#0d1117",
+      foreground: "#c9d1d9",
+      cursor: "#58a6ff",
+      selectionBackground: "#1f6feb66",
+      black: "#484f58",
+      red: "#ff7b72",
+      green: "#3fb950",
+      yellow: "#d29922",
+      blue: "#58a6ff",
+      magenta: "#bc8cff",
+      cyan: "#39c5cf",
+      white: "#b1bac4",
+      brightBlack: "#6e7681",
+      brightRed: "#ffa198",
+      brightGreen: "#56d364",
+      brightYellow: "#e3b341",
+      brightBlue: "#79c0ff",
+      brightMagenta: "#d2a8ff",
+      brightCyan: "#56d4dd",
+      brightWhite: "#f0f6fc",
+    },
   });
   term.loadAddon(fitAddon);
   term.open(el);
@@ -113,6 +134,14 @@ onUnmounted(() => {
         :style="{ '--tab-color': tab.color || '#0078d4' }"
         @click="activeTabId = tab.id"
       >
+        <img
+          v-if="tab.taskType && tab.taskType !== 'default'"
+          :src="`/icons/${tab.taskType}.svg`"
+          width="16"
+          height="16"
+          class="term-tab-icon"
+          alt=""
+        />
         <span class="term-tab-label">{{ tab.label }}</span>
         <span class="term-tab-close" @click.stop="emit('close-tab', tab.id)">×</span>
       </button>
@@ -127,26 +156,30 @@ onUnmounted(() => {
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  background: #1e1e1e;
+  background: #0d1117;
+  border-left: 1px solid #3c3c3c;
 }
 
 .term-tabs {
   display: flex;
-  background: #252526;
+  background: #161b22;
   border-bottom: 1px solid #3c3c3c;
   overflow-x: auto;
   flex-shrink: 0;
+  gap: 2px;
+  padding: 4px 6px 0;
 }
 
 .term-tab {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  background: #2d2d2d;
-  border: none;
-  border-right: 1px solid #3c3c3c;
-  color: #969696;
+  padding: 5px 10px;
+  background: color-mix(in srgb, var(--tab-color, #0078d4) 12%, #0d1117);
+  border: 1px solid #30363d;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  color: #fff;
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
@@ -155,39 +188,70 @@ onUnmounted(() => {
 }
 
 .term-tab:hover {
-  background: #3c3c3c;
-  color: #ccc;
+  background: color-mix(in srgb, var(--tab-color, #0078d4) 22%, #0d1117);
 }
 
 .term-tab.active {
-  background: #1e1e1e;
-  color: #fff;
-  border-top: 2px solid var(--tab-color);
-  padding-top: 4px;
+  background: color-mix(in srgb, var(--tab-color, #0078d4) 25%, #0d1117);
+  border-color: var(--tab-color, #3c3c3c);
+}
+
+.term-tab-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .term-tab-label {
-  max-width: 120px;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .term-tab-close {
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1;
   opacity: 0.5;
-  border-radius: 3px;
-  padding: 0 3px;
+  border-radius: 4px;
+  padding: 0 4px;
+  transition: opacity 0.15s, background 0.15s;
+  margin-left: 2px;
 }
 
 .term-tab-close:hover {
   opacity: 1;
-  background: rgba(255,255,255,0.1);
+  background: rgba(248, 81, 73, 0.35);
+  color: #f85149;
 }
 
 .term-body {
   flex: 1;
-  min-height: 200px;
-  padding: 4px;
+  min-height: 0;
+  padding: 0;
+}
+
+.term-body :deep(.xterm) {
+  height: 100%;
+}
+
+.term-body :deep(.xterm-viewport) {
+  scrollbar-width: thin;
+  scrollbar-color: #30363d #0d1117;
+}
+
+.term-body :deep(.xterm-viewport::-webkit-scrollbar) {
+  width: 8px;
+}
+
+.term-body :deep(.xterm-viewport::-webkit-scrollbar-track) {
+  background: #0d1117;
+}
+
+.term-body :deep(.xterm-viewport::-webkit-scrollbar-thumb) {
+  background: #30363d;
+  border-radius: 4px;
+}
+
+.term-body :deep(.xterm-viewport::-webkit-scrollbar-thumb:hover) {
+  background: #484f58;
 }
 </style>

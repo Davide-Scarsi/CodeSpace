@@ -321,6 +321,28 @@ function cancelConfirmRun() {
   confirmModalTask.value = null;
 }
 
+function closeTerminalTab(wsKey: string, tabId: string) {
+  const arr = terminalTabs.value[wsKey];
+  if (!arr) return;
+  const i = arr.findIndex(t => t.id === tabId);
+  if (i === -1) return;
+  const tab = arr[i];
+  // Clean up runningTasks spinner
+  if (tab.taskType && tab.taskType !== "live-server") {
+    const running = runningTasks.value[wsKey];
+    if (running) {
+      runningTasks.value[wsKey] = running.filter(t => t !== tab.taskType);
+      if (runningTasks.value[wsKey].length === 0) delete runningTasks.value[wsKey];
+    }
+  }
+  // Clean up launchedUrls tracking
+  if (tab.url) launchedUrls.delete(tab.url);
+  // Kill process and remove tab
+  invoke("terminal_kill", { terminalId: tabId }).catch(() => {});
+  arr.splice(i, 1);
+  if (arr.length === 0) delete terminalTabs.value[wsKey];
+}
+
 async function confirmRunTask() {
   const task = confirmModalTask.value;
   if (!task) return cancelConfirmRun();
@@ -690,7 +712,7 @@ onUnmounted(() => {
         :activeColor="activeWorkspace?.color || '#0078d4'"
         :taskIcon="''"
         :taskType="''"
-        @close-tab="(id: string) => { const wsKey = taskViewWsName || ''; const arr = terminalTabs[wsKey]; if (arr) { const i = arr.findIndex(t => t.id === id); if (i !== -1) { invoke('terminal_kill', { terminalId: id }); arr.splice(i, 1); if (arr.length === 0) delete terminalTabs[wsKey]; } } }"
+        @close-tab="(id: string) => closeTerminalTab(taskViewWsName || '', id)"
         @select-tab="() => {}"
       />
     </div>
