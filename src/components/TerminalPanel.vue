@@ -109,20 +109,76 @@ watch(activeTabId, async (id) => {
   setTimeout(() => { try { fitAddon.fit(); } catch (_) {} }, 100);
   const cached = outputCache.value[id] || "";
   console.log("[term] writing cached output:", cached.length, "chars");
-  if (cached) term.write(cached);
+  if (cached) term.write(colorizeOutput(cached, getActiveWsColor()));
 });
 
 let unlistenOut: (() => void) | null = null;
 let unlistenExit: (() => void) | null = null;
+
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : null;
+}
+
+function ansiFg(hex: string): string {
+  const rgb = hexToRgb(hex);
+  return rgb ? `\x1b[38;2;${rgb[0]};${rgb[1]};${rgb[2]}m` : "";
+}
+
+const ANSI_RESET = "\x1b[0m";
+
+function colorizeOutput(text: string, wsColor: string): string {
+  const ws = ansiFg(wsColor || "#58a6ff");
+  const g = ansiFg("#3fb950");
+  const r = ansiFg("#f85149");
+  const y = ansiFg("#d29922");
+  const m = ansiFg("#bc8cff");
+  const gray = ansiFg("#8b949e");
+
+  let out = text;
+
+  // Separators (workspace color) — before other patterns to avoid conflicts
+  out = out.replace(/={3,}/g, (s) => `${ws}${s}${ANSI_RESET}`);
+  out = out.replace(/-{3,}/g, (s) => `${ws}${s}${ANSI_RESET}`);
+
+  // URLs (workspace color)
+  out = out.replace(/https?:\/\/[^\s\x1b]+/g, (s) => `${ws}${s}${ANSI_RESET}`);
+
+  // IP:port (workspace color)
+  out = out.replace(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?/g, (m) => `${ws}${m}${ANSI_RESET}`);
+
+  // [OK], [SUCCESS], ✓ (green)
+  out = out.replace(/\[OK\]|\[SUCCESS\]|✓/gi, (s) => `${g}${s}${ANSI_RESET}`);
+
+  // [ERR], [ERROR], [FAIL], ✗ (red)
+  out = out.replace(/\[ERR\]|\[ERROR\]|\[FAIL\]|✗/gi, (s) => `${r}${s}${ANSI_RESET}`);
+
+  // [WARN], [WARNING] (yellow)
+  out = out.replace(/\[WARN\]|\[WARNING\]/gi, (s) => `${y}${s}${ANSI_RESET}`);
+
+  // [UPLOAD], [DOWNLOAD], [SYNC] (magenta)
+  out = out.replace(/\[UPLOAD\]|\[DOWNLOAD\]|\[SYNC\]/gi, (s) => `${m}${s}${ANSI_RESET}`);
+
+  // [N/M] progression markers (gray)
+  out = out.replace(/\[\d+\/\d+\]/g, (s) => `${gray}${s}${ANSI_RESET}`);
+
+  return out;
+}
+
+function getActiveWsColor(): string {
+  const tab = props.tabs.find(t => t.id === activeTabId.value);
+  return tab?.color || props.activeColor || "#58a6ff";
+}
 
 onMounted(async () => {
   console.log("[TerminalPanel] mounted, tabs:", props.tabs.length);
   unlistenOut = await listen<{ terminalId: string; data: string }>("terminal-output", (e) => {
     const { terminalId, data } = e.payload;
     console.log("[term-out]", terminalId, data.substring(0, 60));
+    // Store raw output, apply colors at display time
     outputCache.value[terminalId] = (outputCache.value[terminalId] || "") + data;
     if (term && activeTabId.value === terminalId) {
-      term.write(data);
+      term.write(colorizeOutput(data, getActiveWsColor()));
     }
   });
 
