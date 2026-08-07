@@ -25,7 +25,8 @@
       "codeSpace": {
         "taskType": "live-server",
         "url": "http://localhost:1420",
-        "confirmationRequest": true
+        "confirmationRequest": true,
+        "hidden": true
       }
     },
     {
