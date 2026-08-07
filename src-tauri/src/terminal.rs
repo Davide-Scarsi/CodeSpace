@@ -18,11 +18,16 @@ pub fn terminal_spawn(app: tauri::AppHandle, terminal_id: String, command: Strin
         ("powershell".into(), vec!["-NoProfile".into(), "-Command".into(), format!("{} *>&1", command)])
     } else {
         if is_ps && !args.is_empty() {
-            // Don't append *>&1 to -File args (it breaks the path)
             let last_is_file = args.windows(2).any(|w| w[0].eq_ignore_ascii_case("-File"));
-            if !last_is_file {
+            let last_starts_flag = args.last().map(|a| a.starts_with('-')).unwrap_or(false);
+            if !last_is_file && !last_starts_flag {
                 let last = args.len() - 1;
-                args[last] = format!("{} *>&1", args[last]);
+                // If the command ends with '}', put *>&1 inside the script block
+                if args[last].ends_with('}') {
+                    args[last] = format!("{} *>&1 }}", &args[last][..args[last].len()-1]);
+                } else {
+                    args[last] = format!("{} *>&1", args[last]);
+                }
             }
         }
         (command, args)
