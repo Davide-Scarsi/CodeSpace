@@ -283,8 +283,9 @@ async function runTaskExecute(task: TaskItem) {
     }
     const tabId = task.task_type + "-" + Date.now();
     const color = ws?.color || "#0078d4";
+    const newTab: TerminalTab = { id: tabId, label: task.label, taskType: task.task_type || "default", color, url: task.url || undefined };
     if (!terminalTabs.value[wsName]) terminalTabs.value[wsName] = [];
-    terminalTabs.value[wsName].push({ id: tabId, label: task.label, taskType: task.task_type || "default", color, url: task.url || undefined });
+    terminalTabs.value[wsName] = [...terminalTabs.value[wsName], newTab];
     if (terminalTabs.value[wsName].length === 1) {
       try {
         const win = getCurrentWindow();
@@ -337,10 +338,10 @@ function closeTerminalTab(wsKey: string, tabId: string) {
   }
   // Clean up launchedUrls tracking
   if (tab.url) launchedUrls.delete(tab.url);
-  // Kill process and remove tab
+  // Kill process and remove tab (new array ref for reactivity)
   invoke("terminal_kill", { terminalId: tabId }).catch(() => {});
-  arr.splice(i, 1);
-  if (arr.length === 0) delete terminalTabs.value[wsKey];
+  terminalTabs.value[wsKey] = arr.filter(t => t.id !== tabId);
+  if (terminalTabs.value[wsKey].length === 0) delete terminalTabs.value[wsKey];
 }
 
 async function confirmRunTask() {

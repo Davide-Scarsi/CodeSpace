@@ -38,11 +38,19 @@ let term: Terminal | null = null;
 const fitAddon = new FitAddon();
 const outputCache = ref<Record<string, string>>({});
 
+let prevCount = 0;
+
 watch(() => props.tabs, async (tabs) => {
-  console.log("[term] tabs changed:", tabs.length);
-  if (tabs.length > 0) {
-    // Restore previously active tab if it still exists
-    if (persistedTabId.value && tabs.some(t => t.id === persistedTabId.value)) {
+  const count = tabs.length;
+  console.log("[term] tabs changed:", count, "prev:", prevCount, "active:", activeTabId.value);
+  if (count > 0) {
+    if (count > prevCount) {
+      // New tab added: always focus it
+      const newTab = tabs[count - 1];
+      console.log("[term] new tab detected, focusing:", newTab.id);
+      activeTabId.value = newTab.id;
+      persistedTabId.value = newTab.id;
+    } else if (persistedTabId.value && tabs.some(t => t.id === persistedTabId.value)) {
       activeTabId.value = persistedTabId.value;
     } else if (!activeTabId.value || !tabs.some(t => t.id === activeTabId.value)) {
       activeTabId.value = tabs[0].id;
@@ -52,6 +60,7 @@ watch(() => props.tabs, async (tabs) => {
     activeTabId.value = null;
     if (term) { term.dispose(); term = null; }
   }
+  prevCount = count;
 }, { immediate: true });
 
 // Keep persisted tab in sync with active
