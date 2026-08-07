@@ -1,10 +1,10 @@
 ﻿use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Command, Stdio, Child};
-use std::sync::{Arc, Mutex};
+use std::process::{Command, Stdio};
+use std::sync::Mutex;
 use tauri::Emitter;
 
-struct TermSession { stdin: Mutex<Box<dyn Write + Send>>, child: Arc<Mutex<Option<Child>>>, }
+struct TermSession { stdin: Mutex<Box<dyn Write + Send>>, child_pid: u32, }
 static TERMINALS: Mutex<Option<HashMap<String, TermSession>>> = Mutex::new(None);
 fn init_terminals() { let mut g = TERMINALS.lock().unwrap(); if g.is_none() { *g = Some(HashMap::new()); } }
 
@@ -22,19 +22,18 @@ pub fn terminal_spawn(app: tauri::AppHandle, terminal_id: String, command: Strin
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).stdin(Stdio::piped());
     if let Some(ref dir) = cwd { cmd.current_dir(dir); }
     let mut child = cmd.spawn().map_err(|e| format!("Spawn: {}", e))?;
+    let pid = child.id();
     let stdout = child.stdout.take().ok_or("No stdout")?;
     let stderr = child.stderr.take().ok_or("No stderr")?;
     let stdin = child.stdin.take().ok_or("No stdin")?;
-    let child_arc = Arc::new(Mutex::new(Some(child)));
-    let child_clone = child_arc.clone();
-    let tid_exit = terminal_id.clone(); let a_exit = app.clone();
-    std::thread::spawn(move || { let c = child_clone.lock().unwrap().take(); if let Some(mut ch) = c { let _ = ch.wait(); } let _ = a_exit.emit("terminal-exit", serde_json::json!({"terminalId":tid_exit})); });
+    let tid = terminal_id.clone(); let a = app.clone();
+    std::thread::spawn(move || { let _ = child.wait(); let _ = a.emit("terminal-exit", serde_json::json!({"terminalId":tid})); });
     let tid2 = terminal_id.clone(); let a2 = app.clone();
     std::thread::spawn(move || { for line in BufReader::new(stdout).lines().flatten() { let _ = a2.emit("terminal-output", serde_json::json!({"terminalId":tid2,"data":line+"\r\n"})); } });
     let tid3 = terminal_id.clone(); let a3 = app.clone();
     std::thread::spawn(move || { for line in BufReader::new(stderr).lines().flatten() { let _ = a3.emit("terminal-output", serde_json::json!({"terminalId":tid3,"data":line+"\r\n"})); } });
     init_terminals();
-    TERMINALS.lock().unwrap().as_mut().unwrap().insert(terminal_id, TermSession{stdin:Mutex::new(Box::new(stdin)), child: child_arc});
+    TERMINALS.lock().unwrap().as_mut().unwrap().insert(terminal_id, TermSession{stdin:Mutex::new(Box::new(stdin)), child_pid: pid});
     Ok(())
 }
 
@@ -51,9 +50,11 @@ pub fn terminal_kill(terminal_id: String) -> Result<(), String> {
     init_terminals();
     let mut g = TERMINALS.lock().unwrap();
     if let Some(s) = g.as_mut().unwrap().remove(&terminal_id) {
-        if let Ok(mut c) = s.child.lock() {
-            if let Some(ref mut ch) = *c { let _ = ch.kill(); }
-        }
+        // Kill entire process tree (e.g. PowerShell + child PHP)
+        let _ = Command::new("taskkill")
+            .args(["/F", "/T", "/PID", &s.child_pid.to_string()])
+            .stdout(Stdio::null()).stderr(Stdio::null())
+            .spawn();
     }
     Ok(())
 }
