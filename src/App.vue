@@ -255,7 +255,7 @@ async function runTaskExecute(task: TaskItem) {
     const tabId = task.task_type + "-" + Date.now();
     const color = ws?.color || "#0078d4";
     if (!terminalTabs.value[wsName]) terminalTabs.value[wsName] = [];
-    terminalTabs.value[wsName].push({ id: tabId, label: task.label, taskType: task.task_type || "default", color });
+    terminalTabs.value[wsName].push({ id: tabId, label: task.label, taskType: task.task_type || "default", color, url: task.url || undefined });
     if (terminalTabs.value[wsName].length === 1) {
       try {
         const win = getCurrentWindow();
@@ -349,6 +349,14 @@ async function toggleLiveTerminal(wsName: string) {
   const hwnds = liveTerminals.value[wsName];
   if (hwnds && hwnds.length > 0) {
     await invoke("toggle_live_terminal", { hwnds });
+  }
+}
+
+function openLiveUrl(wsName: string) {
+  const tabs = terminalTabs.value[wsName] || [];
+  const liveTab = tabs.find(t => t.taskType === "live-server" && t.url);
+  if (liveTab?.url) {
+    invoke("launch_url", { url: liveTab.url }).catch(() => {});
   }
 }
 
@@ -568,8 +576,8 @@ onUnmounted(() => {
           v-if="(liveTerminals[ws.name]?.length || (terminalTabs[ws.name] || []).some(t => t.taskType === 'live-server'))"
           class="ws-btn ws-live-icon"
           :style="{ color: ws.color || '#58a6ff' }"
-          title="Live server active"
-          @click.stop="toggleLiveTerminal(ws.name)"
+          title="Open live server in browser"
+          @click.stop="openLiveUrl(ws.name)"
         >
           <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M6.34 4.94a1 1 0 0 1 0 1.41 8.5 8.5 0 0 0 0 11.32 1 1 0 0 1-1.41 1.41C1.02 15.18 1.02 8.85 4.93 4.94a1 1 0 0 1 1.41 0zm12.73 0c3.9 3.9 3.9 10.24 0 14.14a1 1 0 0 1-1.41-1.41 8.5 8.5 0 0 0 0-11.32 1 1 0 0 1 1.41-1.41zM9.31 7.81a1 1 0 0 1 0 1.42 4.5 4.5 0 0 0 0 5.54 1 1 0 0 1-1.41 1.41 6.5 6.5 0 0 1 0-8.37 1 1 0 0 1 1.41 0zm6.96 0a6.5 6.5 0 0 1 0 8.37 1 1 0 0 1-1.41-1.41 4.5 4.5 0 0 0 0-5.54 1 1 0 0 1 1.41-1.42zM12.08 10.58a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>
         </button>

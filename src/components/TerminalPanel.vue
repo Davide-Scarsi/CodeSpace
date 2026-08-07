@@ -10,6 +10,7 @@ export interface TerminalTab {
   label: string;
   taskType: string;
   color: string;
+  url?: string;
 }
 
 const props = defineProps<{
