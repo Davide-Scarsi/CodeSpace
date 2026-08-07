@@ -1136,7 +1136,7 @@ body {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 1ch;
   margin-left: 4px;
 }
 
