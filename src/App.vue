@@ -529,9 +529,6 @@ onUnmounted(() => {
         :style="{ '--ws-color': ws.color || '#0078d4' }"
         @click="handleRowClick(ws)"
       >
-        <div class="ws-traffic-light" :class="{ open: ws.is_open, active: ws.is_open && ws.name === activeWorkspace?.name }">
-          <span v-if="ws.is_open" class="dot" :class="{ active: ws.name === activeWorkspace?.name }"></span>
-        </div>
         <div class="ws-icon">
           <VscodeIcon :color="ws.color" :size="28" />
         </div>
@@ -951,8 +948,8 @@ body {
 .ws-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 2ch;
+  padding: 8px 12px 8px 16px;
   margin: 2px 0;
   border-radius: 6px;
   border: 1px solid transparent;
@@ -1156,7 +1153,7 @@ body {
 /* ── Active workspace banner ──────────────────────────── */
 .active-banner {
   display: flex; align-items: center; gap: 12px;
-  padding: 24px 16px 24px 24px; flex-shrink: 0;
+  padding: 24px 24px 24px 16px; flex-shrink: 0;
   position: relative; overflow: hidden;
   background:
     linear-gradient(90deg, var(--ws-color) 0% 20%, transparent 20%),
