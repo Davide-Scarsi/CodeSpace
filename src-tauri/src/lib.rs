@@ -1295,7 +1295,7 @@ fn focus_browser(url: String) -> Result<(), String> {
 fn focus_any_browser() -> Result<(), String> {
     #[cfg(windows)]
     {
-        let cs_pid = unsafe { std::process::id() };
+        let cs_pid = std::process::id();
         let cs_tid = unsafe { GetCurrentThreadId() };
 
         unsafe fn is_browser(pid: u32) -> bool {
