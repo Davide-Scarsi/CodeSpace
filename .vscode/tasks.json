@@ -154,7 +154,7 @@
         "-Command",
         "Write-Host '============================================' -ForegroundColor Cyan; Write-Host '  PowerShell Automation Script' -ForegroundColor Cyan; Write-Host '============================================' -ForegroundColor Cyan; Write-Host ''; Write-Host 'System Info:' -ForegroundColor Yellow; Write-Host ('  Hostname : ' + $env:COMPUTERNAME); Write-Host ('  User     : ' + $env:USERNAME); Write-Host ('  OS       : ' + (Get-CimInstance Win32_OperatingSystem | Select-Object -ExpandProperty Caption)); Write-Host ('  PS Ver   : ' + $PSVersionTable.PSVersion.ToString()); Write-Host ''; Write-Host 'Running tasks...' -ForegroundColor Gray; 1..3 | ForEach-Object { Start-Sleep -Milliseconds 300; Write-Host ('  [' + $_ + '/3] Task completed') -ForegroundColor Gray }; Write-Host ''; Write-Host '[OK] All tasks finished successfully' -ForegroundColor Green"
       ],
-      "codeSpace": { "taskType": "powershell" }
+      "codeSpace": { "taskType": "powershell", "hidden": true }
     },
     {
       "label": "Test: Default (no taskType)",
@@ -166,6 +166,91 @@
         "Write-Host '============================================' -ForegroundColor Cyan; Write-Host '  Generic Task (no taskType)' -ForegroundColor Cyan; Write-Host '============================================' -ForegroundColor Cyan; Write-Host ''; Write-Host 'This task has no codeSpace.taskType set.' -ForegroundColor Yellow; Write-Host 'It should render with the default icon.' -ForegroundColor Yellow; Write-Host ''; Write-Host '[OK] Default task executed successfully' -ForegroundColor Green"
       ],
       "codeSpace": {}
+    },
+    {
+      "label": "Edge: sync with spaces in path",
+      "detail": "Tests PowerShell script block with *>&1 inside braces and Write-Host",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoProfile", "-Command", "$out = 'C:\\Program Files\\test\\output.txt'; Write-Host ('[OK] Output to ' + $out) -ForegroundColor Green; Write-Host '[1/2] Processing...' -ForegroundColor Gray; Start-Sleep -Milliseconds 200; Write-Host '[2/2] Done' -ForegroundColor Gray; Write-Host '[OK] Sync completed with spaces' -ForegroundColor Green"],
+      "codeSpace": { "taskType": "sync", "hidden": true }
+    },
+    {
+      "label": "Edge: push with special chars",
+      "detail": "Tests commit messages with quotes, brackets, and Unicode",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoProfile", "-Command", "Write-Host '>>> Push with special chars...'; Write-Host '[OK] Pushed: fix(api): handle \"null\" input [JIRA-123]' -ForegroundColor Green; Write-Host '[OK] Pushed: feat(ui): aggiunto pulsante → azione ✗ ✓' -ForegroundColor Green; Write-Host '[OK] Push completed' -ForegroundColor Green"],
+      "codeSpace": { "taskType": "push", "hidden": true }
+    },
+    {
+      "label": "Edge: upload with unicode names",
+      "detail": "Tests filenames with spaces, accents, and special characters",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoProfile", "-Command", "Write-Host '[UPLOAD] file with spaces.pdf (220KB)'; Write-Host '[UPLOAD] déjà_vu_测试.txt (1KB)'; Write-Host '[UPLOAD] config (production).json (440KB)'; Write-Host '[OK] 3 files uploaded (661KB)' -ForegroundColor Green"],
+      "codeSpace": { "taskType": "upload", "hidden": true }
+    },
+    {
+      "label": "Edge: npm with nested quotes",
+      "detail": "Tests complex PowerShell escaping with nested quotes and variables",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoProfile", "-Command", "$name = 'world'; Write-Host ('[OK] Hello ' + $name + ' from npm') -ForegroundColor Green; Write-Host ('Node: ' + (node -v 2>&1).Trim()) -ForegroundColor Cyan; Write-Host ('NPM: ' + (npm -v 2>&1).Trim()) -ForegroundColor Cyan"],
+      "codeSpace": { "taskType": "npm", "hidden": true }
+    },
+    {
+      "label": "Edge: PowerShell with errors",
+      "detail": "Tests mixed output: some commands fail, some succeed",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoProfile", "-Command", "Write-Host '[OK] Starting checks...' -ForegroundColor Green; Get-Command nonexistent123 2>$null; Write-Host '[WARN] Command not found, continuing...' -ForegroundColor Yellow; Get-ChildItem $env:USERPROFILE -ErrorAction SilentlyContinue | Select-Object -First 1 | Out-Null; Write-Host '[OK] All checks passed' -ForegroundColor Green"],
+      "codeSpace": { "taskType": "powershell", "hidden": true }
+    },
+    {
+      "label": "Edge: -File with spaces in path",
+      "detail": "Tests that *>&1 is NOT appended to -File paths",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}\\scripts\\test with spaces.ps1"],
+      "codeSpace": { "taskType": "ftp-mount", "hidden": true }
+    },
+    {
+      "label": "Edge: live-server with double quotes",
+      "detail": "Tests that URLs with query params don't break output",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoProfile", "-Command", "Write-Host 'Server running at http://127.0.0.1:3000?token=abc&mode=test' -ForegroundColor Cyan; Write-Host '[OK] Ready for connections' -ForegroundColor Green; Start-Sleep -Seconds 5"],
+      "codeSpace": { "taskType": "live-server", "hidden": true }
+    },
+    {
+      "label": "Edge: php-server with nonstandard port",
+      "detail": "Tests PHP on a port that looks like an IP fragment",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoProfile", "-Command", "Write-Host 'PHP 8.2.12 Development Server started at http://127.0.0.1:8080' -ForegroundColor Cyan; Write-Host '[OK] Listening on port 8080' -ForegroundColor Green; Start-Sleep -Seconds 5"],
+      "codeSpace": { "taskType": "php-server", "hidden": true }
+    },
+    {
+      "label": "Edge: add-user with Read-Host fallback",
+      "detail": "Tests the ${input:...} fallback pattern for interactive input",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "param([string]$Email = '', [string]$Name = ''); if (-not $Email -or $Email -match '\\$\\{input:') { $Email = 'test@example.com' }; if (-not $Name -or $Name -match '\\$\\{input:') { $Name = 'Test User' }; Write-Host ('[OK] User ' + $Name + ' <' + $Email + '> added') -ForegroundColor Green"],
+      "codeSpace": { "taskType": "add-user", "hidden": true }
+    },
+    {
+      "label": "🧪 Test Terminale (unit test)",
+      "detail": "Lancia il terminal-tester su tutte le task e verifica pattern",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "Write-Host 'Running terminal-tester...' -ForegroundColor Cyan; .\\target\\debug\\terminal-tester.exe ..\\.vscode\\tasks.json"
+      ],
+      "options": { "cwd": "${workspaceFolder}\\src-tauri" },
+      "codeSpace": { "taskType": "test" }
     }
   ]
 }

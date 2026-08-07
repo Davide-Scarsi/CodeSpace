@@ -72,6 +72,7 @@ struct CodeSpaceSettings {
     confirmation_request: Option<bool>,
     #[serde(rename = "closeWhenDone")]
     close_when_done: Option<bool>,
+    hidden: Option<bool>,
 }
 
 /// Icon mapping: task-type → Lucide SVG path (24x24 viewBox, stroke-based)
@@ -1007,6 +1008,8 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
     if let Some(tasks) = tasks_json.tasks {
         for t in tasks {
             if t.task_type.as_deref() == Some("shell") {
+                // Skip hidden tasks
+                if t.code_space.as_ref().and_then(|cs| cs.hidden).unwrap_or(false) { continue; }
                 if let (Some(label), Some(cmd_name)) = (t.label, t.command) {
                     let user_home = std::env::var("USERPROFILE")
                         .or_else(|_| std::env::var("HOME"))

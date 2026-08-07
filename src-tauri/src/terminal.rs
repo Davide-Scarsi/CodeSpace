@@ -14,7 +14,17 @@ fn init_terminals() { let mut g = TERMINALS.lock().unwrap(); if g.is_none() { *g
 #[tauri::command]
 pub fn terminal_spawn(app: tauri::AppHandle, terminal_id: String, command: String, mut args: Vec<String>, cwd: Option<String>) -> Result<(), String> {
     let is_ps = command.eq_ignore_ascii_case("powershell") || command.eq_ignore_ascii_case("pwsh");
-    let (cmd_name, final_args): (String, Vec<String>) = if args.is_empty() && command.contains(' ') {
+    let is_cmd = command.eq_ignore_ascii_case("cmd");
+    let has_separator = command.contains('\\') || command.contains('/');
+
+    // If command has no path separator and isn't a shell, wrap in cmd /c
+    let (cmd_name, final_args): (String, Vec<String>) = if !is_ps && !is_cmd && !has_separator && !args.is_empty() {
+        ("cmd".into(), {
+            let mut a = vec!["/c".into(), command];
+            a.extend(args);
+            a
+        })
+    } else if args.is_empty() && command.contains(' ') {
         ("powershell".into(), vec!["-NoProfile".into(), "-Command".into(), format!("{} *>&1", command)])
     } else {
         if is_ps && !args.is_empty() {
