@@ -24,21 +24,22 @@
       },
       "codeSpace": {
         "taskType": "live-server",
-        "url": "http://localhost:1420"
-      }
-    },
-    {
-      "label": "🧪 Test echo",
-      "type": "shell",
-      "command": "echo",
-      "args": ["Task eseguita correttamente da CodeSpace!"],
-      "codeSpace": {
-        "taskType": "",
+        "url": "http://localhost:1420",
         "confirmationRequest": true
       }
     },
     {
-      "label": "🧪 Live Server Test",
+      "label": "Test echo",
+      "type": "shell",
+      "command": "echo",
+      "args": ["Task eseguita correttamente da CodeSpace!"],
+      "codeSpace": {
+        "taskType": "test",
+        "confirmationRequest": true
+      }
+    },
+    {
+      "label": "Live Server Test",
       "type": "shell",
       "command": "ping",
       "args": ["-t", "localhost"],

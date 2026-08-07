@@ -74,6 +74,8 @@ fn get_task_icon(task_type: &str) -> &str {
         "php-server" => "M12 2 2 7l10 5 10-5-10-5z M2 17l10 5 10-5 M2 12l10 5 10-5",
         "npm" => "M12 2l10 5v10l-10 5-10-5V7z M12 22V12 M4 7l8 4 8-4",
         "echo" => "M4 6h16 M4 12h10 M4 18h8",
+            "add-user" => include_str!("../../public/icons/add-user.svg"),
+        "test" => "M8 2v6a6 6 0 0 0 8 0V2 M6 14h12 M10 18h4",
         "powershell" => "M4 17l6-6-6-6 M12 19h8",
         _ => "M5 3l14 9-14 9V3z", // default: play triangle
     }

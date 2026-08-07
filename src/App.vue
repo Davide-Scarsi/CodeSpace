@@ -175,6 +175,13 @@ const tasks = ref<TaskItem[]>([]);
 const confirmModalVisible = ref(false);
 const confirmModalTask = ref<TaskItem | null>(null);
 
+// Track missing custom icons to fallback to built-in path icon
+const missingIcons = ref(new Set<string>());
+function iconLoadError(taskType: string | undefined) {
+  if (!taskType) return;
+  missingIcons.value.add(taskType);
+}
+
 const PEAKOCK_COLORS = [
   "#007fff", "#ff007f", "#00bcd4", "#00ff7f", "#9c27b0",
   "#ff5722", "#ffc107", "#3f51b5", "#8bc34a", "#e91e63",
@@ -517,7 +524,15 @@ onUnmounted(() => {
         @click="runTask(t)"
       >
         <div class="ws-icon">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path :d="t.icon"/></svg>
+          <img
+            v-if="t.task_type && !missingIcons.has(t.task_type)"
+            :src="`/icons/${t.task_type}.svg`"
+            width="28"
+            height="28"
+            alt=""
+            @error="() => iconLoadError(t.task_type)"
+          />
+          <svg v-else width="28" height="28" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path :d="t.icon"/></svg>
         </div>
         <div class="ws-info">
           <span class="ws-name">{{ t.label }}</span>
