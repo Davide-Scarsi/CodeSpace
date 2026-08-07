@@ -564,15 +564,15 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-        <div
+        <button
           v-if="(liveTerminals[ws.name]?.length || (terminalTabs[ws.name] || []).some(t => t.taskType === 'live-server'))"
-          class="ws-live-btn"
-          :style="{ '--ws-color': ws.color || '#0078d4' }"
-          title="Toggle live server terminal"
+          class="ws-btn ws-live-icon"
+          :style="{ color: ws.color || '#58a6ff' }"
+          title="Live server active"
           @click.stop="toggleLiveTerminal(ws.name)"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="position:relative;z-index:1"><path d="M6.34 4.94a1 1 0 0 1 0 1.41 8.5 8.5 0 0 0 0 11.32 1 1 0 0 1-1.41 1.41C1.02 15.18 1.02 8.85 4.93 4.94a1 1 0 0 1 1.41 0zm12.73 0c3.9 3.9 3.9 10.24 0 14.14a1 1 0 0 1-1.41-1.41 8.5 8.5 0 0 0 0-11.32 1 1 0 0 1 1.41-1.41zM9.31 7.81a1 1 0 0 1 0 1.42 4.5 4.5 0 0 0 0 5.54 1 1 0 0 1-1.41 1.41 6.5 6.5 0 0 1 0-8.37 1 1 0 0 1 1.41 0zm6.96 0a6.5 6.5 0 0 1 0 8.37 1 1 0 0 1-1.41-1.41 4.5 4.5 0 0 0 0-5.54 1 1 0 0 1 1.41-1.42zM12.08 10.58a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>
-        </div>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M6.34 4.94a1 1 0 0 1 0 1.41 8.5 8.5 0 0 0 0 11.32 1 1 0 0 1-1.41 1.41C1.02 15.18 1.02 8.85 4.93 4.94a1 1 0 0 1 1.41 0zm12.73 0c3.9 3.9 3.9 10.24 0 14.14a1 1 0 0 1-1.41-1.41 8.5 8.5 0 0 0 0-11.32 1 1 0 0 1 1.41-1.41zM9.31 7.81a1 1 0 0 1 0 1.42 4.5 4.5 0 0 0 0 5.54 1 1 0 0 1-1.41 1.41 6.5 6.5 0 0 1 0-8.37 1 1 0 0 1 1.41 0zm6.96 0a6.5 6.5 0 0 1 0 8.37 1 1 0 0 1-1.41-1.41 4.5 4.5 0 0 0 0-5.54 1 1 0 0 1 1.41-1.42zM12.08 10.58a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>
+        </button>
         <div
           v-if="runningTasks[ws.name]?.length"
           class="ws-task-spinner"
@@ -1274,6 +1274,15 @@ body {
   background: #30363d;
   color: #c9d1d9;
   border-color: #484f58;
+}
+
+.ws-live-icon {
+  animation: live-icon-pulse 3s ease-in-out infinite;
+}
+
+@keyframes live-icon-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
 }
 
 .ws-btn-launch:hover {
