@@ -288,7 +288,7 @@ async function runTaskExecute(task: TaskItem) {
     }
     const tabId = task.task_type + "-" + Date.now();
     const color = ws?.color || "#0078d4";
-    const newTab: TerminalTab = { id: tabId, label: task.label, taskType: task.task_type || "default", color, url: task.url || undefined };
+    const newTab: TerminalTab = { id: tabId, label: task.label, taskType: task.task_type || "default", color, url: task.url || undefined, closeWhenDone: task.close_when_done };
     if (!terminalTabs.value[wsName]) terminalTabs.value[wsName] = [];
     terminalTabs.value[wsName] = [...terminalTabs.value[wsName], newTab];
     if (terminalTabs.value[wsName].length === 1) {

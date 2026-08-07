@@ -22,6 +22,8 @@ fn main() {
 
     for t in tasks {
         let label = t["label"].as_str().unwrap_or("?");
+        // Skip tasks that are not testable (real dev server, etc.)
+        if label.contains("Avvia CodeSpace") { continue; }
         let cmd = t["command"].as_str().unwrap_or("");
         let args: Vec<String> = t["args"].as_array()
             .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())

@@ -19,6 +19,7 @@ export interface TerminalTab {
   taskType: string;
   color: string;
   url?: string;
+  closeWhenDone?: boolean;
 }
 
 const props = defineProps<{
@@ -212,6 +213,11 @@ onMounted(async () => {
   unlistenExit = await listen<{ terminalId: string }>("terminal-exit", (e) => {
     console.log("[term-exit]", e.payload.terminalId);
     exitedIds.value.add(e.payload.terminalId);
+    const tab = props.tabs.find(t => t.id === e.payload.terminalId);
+    if (tab?.closeWhenDone) {
+      // Auto-close tab after brief delay so user sees the exit message
+      setTimeout(() => emit("close-tab", e.payload.terminalId), 1500);
+    }
     if (term && activeTabId.value === e.payload.terminalId) {
       term.write("\r\n\n[Process exited]\r\n");
     }
