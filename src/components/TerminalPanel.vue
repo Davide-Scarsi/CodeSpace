@@ -1,3 +1,9 @@
+<script lang="ts">
+import { ref } from "vue";
+// Persists across TerminalPanel mounts/unmounts
+const exitedIds = ref<Set<string>>(new Set());
+</script>
+
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { Terminal } from "@xterm/xterm";
@@ -102,6 +108,7 @@ onMounted(async () => {
 
   unlistenExit = await listen<{ terminalId: string }>("terminal-exit", (e) => {
     console.log("[term-exit]", e.payload.terminalId);
+    exitedIds.value.add(e.payload.terminalId);
     if (term && activeTabId.value === e.payload.terminalId) {
       term.write("\r\n\n[Process exited]\r\n");
     }
@@ -140,6 +147,7 @@ onUnmounted(() => {
           width="16"
           height="16"
           class="term-tab-icon"
+          :class="{ 'icon-spin': tab.taskType === 'sync' && !exitedIds.has(tab.id) }"
           alt=""
         />
         <span class="term-tab-label">{{ tab.label }}</span>
@@ -199,6 +207,15 @@ onUnmounted(() => {
 .term-tab-icon {
   flex-shrink: 0;
   opacity: 0.85;
+}
+
+.icon-spin {
+  animation: tab-icon-spin 3s linear infinite;
+}
+
+@keyframes tab-icon-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .term-tab-label {
