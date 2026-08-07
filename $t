@@ -1,0 +1,55 @@
+============================================
+  Data Sync Simulation
+============================================
+
+[1/6] Testing connectivity...
+[OK] Connected to 5.135.1.236:3306 (MySQL 8.0)
+[2/6] Fetching remote schema...
+  - [schema OK]
+  - [schema OK]
+  - [schema OK]
+  - [schema OK]
+  - [schema OK]
+  - [schema OK]
+  - [schema OK]
+  - [schema OK]
+  - [schema OK]
+  - [schema OK]
+[3/6] Downloading delta changes...
+  -  (543 rows)
+  -  (83 rows)
+  -  (259 rows)
+  -  (586 rows)
+  -  (393 rows)
+  -  (279 rows)
+  -  (404 rows)
+  -  (109 rows)
+  -  (236 rows)
+  -  (386 rows)
+[4/6] Validating checksums...
+  - [SHA256 OK]
+  - [SHA256 OK]
+  - [SHA256 OK]
+  - [SHA256 OK]
+  - [SHA256 OK]
+  - [SHA256 OK]
+  - [SHA256 OK]
+  - [SHA256 OK]
+  - [SHA256 OK]
+  - [SHA256 OK]
+[5/6] Importing into local DB...
+  - [470 rows imported]
+  - [147 rows imported]
+  - [464 rows imported]
+  - [89 rows imported]
+  - [410 rows imported]
+  - [204 rows imported]
+  - [395 rows imported]
+  - [538 rows imported]
+  - [116 rows imported]
+  - [537 rows imported]
+[OK] Total: 3370 records
+[6/6] Updating indexes...
+[OK] Indexes rebuilt
+
+Sync completed in 31.1s

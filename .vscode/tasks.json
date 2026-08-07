@@ -29,7 +29,7 @@
       }
     },
     {
-      "label": "Test echo",
+      "label": "Test: Echo",
       "type": "shell",
       "command": "echo",
       "args": ["Task eseguita correttamente da CodeSpace!"],
@@ -39,13 +39,133 @@
       }
     },
     {
-      "label": "Live Server Test",
+      "label": "Test: Live Server",
       "type": "shell",
-      "command": "ping",
-      "args": ["-t", "localhost"],
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "Write-Host '============================================' -ForegroundColor Cyan; Write-Host '  Simulated Live Server - http://127.0.0.1:9090' -ForegroundColor Cyan; Write-Host '============================================' -ForegroundColor Cyan; Write-Host ''; Write-Host '[OK] Server started' -ForegroundColor Green; Write-Host '[OK] Watching for changes...' -ForegroundColor Green; Write-Host '[OK] Hot-reload enabled' -ForegroundColor Green; Write-Host ''; Write-Host 'Press Ctrl+C to stop' -ForegroundColor Yellow; ping -t 127.0.0.1"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated" },
       "codeSpace": {
-        "taskType": "live-server"
+        "taskType": "live-server",
+        "url": "http://localhost:9090"
       }
+    },
+    {
+      "label": "Test: PHP Server",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "Write-Host '============================================' -ForegroundColor Cyan; Write-Host '  PHP Built-in Server - http://127.0.0.1:8089' -ForegroundColor Cyan; Write-Host '============================================' -ForegroundColor Cyan; Write-Host ''; $tmpDir = Join-Path $env:TEMP 'cs-php-test'; New-Item -ItemType Directory -Force $tmpDir | Out-Null; '<?php echo \"[php-server] CodeSpace test OK @ \" . date(\"H:i:s\"); ?>' | Out-File -FilePath (Join-Path $tmpDir 'index.php') -Encoding utf8; Write-Host '[OK] Document root:' $tmpDir -ForegroundColor Green; Write-Host '[OK] PHP version:' (php -v | Select-Object -First 1) -ForegroundColor Green; Write-Host ''; Write-Host 'Press Ctrl+C to stop' -ForegroundColor Yellow; php -S 127.0.0.1:8089 -t $tmpDir"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "codeSpace": { "taskType": "php-server" }
+    },
+    {
+      "label": "Test: NPM",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "$ver = npm --version; $node = node --version; Write-Host 'NPM:' $ver -ForegroundColor Cyan; Write-Host 'Node:' $node -ForegroundColor Cyan; if (Test-Path 'package.json') { $pkg = Get-Content package.json | ConvertFrom-Json; Write-Host ''; Write-Host 'Project:' $pkg.name -ForegroundColor Green; Write-Host 'Dependencies:' $pkg.dependencies.PSObject.Properties.Name.Count -ForegroundColor Green; Write-Host '[OK] All checks passed' -ForegroundColor Green } else { Write-Host '[WARN] No package.json in current folder' -ForegroundColor Yellow }"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "codeSpace": { "taskType": "npm" }
+    },
+    {
+      "label": "Test: Echo (icon)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "Write-Host '=== Echo Task Simulation ===' -ForegroundColor Cyan; Write-Host ''; 1..5 | ForEach-Object { Write-Host ('[STEP ' + $_ + '/5] Processing item ' + $_ + '...') -ForegroundColor Gray; Start-Sleep -Milliseconds 300 }; Write-Host ''; Write-Host '[OK] Echo task completed' -ForegroundColor Green; Write-Host ('Timestamp: ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) -ForegroundColor Gray"
+      ],
+      "codeSpace": { "taskType": "echo" }
+    },
+    {
+      "label": "Test: FTP Mount",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "Write-Host '============================================' -ForegroundColor Cyan; Write-Host '  FTP Mount Simulation' -ForegroundColor Cyan; Write-Host '============================================' -ForegroundColor Cyan; Write-Host ''; Write-Host '[1/3] Checking rclone...' -ForegroundColor Gray; Start-Sleep -Milliseconds 500; Write-Host '[OK] rclone v1.68 found' -ForegroundColor Green; Write-Host '[2/3] Connecting to ftp.example.com...' -ForegroundColor Gray; Start-Sleep -Milliseconds 800; Write-Host '[OK] Connected (TLS 1.3)' -ForegroundColor Green; Write-Host '[3/3] Mounting to X:...' -ForegroundColor Gray; Start-Sleep -Milliseconds 600; Write-Host '[OK] Drive X: mounted successfully' -ForegroundColor Green; Write-Host ''; Write-Host 'Mounted: ftp://example.com' -ForegroundColor Yellow; Write-Host 'Local:   X:' -ForegroundColor Yellow"
+      ],
+      "codeSpace": { "taskType": "ftp-mount", "confirmationRequest": true }
+    },
+    {
+      "label": "Test: Upload",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "Write-Host '============================================' -ForegroundColor Cyan; Write-Host '  Upload Simulation' -ForegroundColor Cyan; Write-Host '============================================' -ForegroundColor Cyan; Write-Host ''; $files = @('config.json','data.csv','report.pdf','logo.png','script.ps1'); $total = 0; foreach ($f in $files) { $size = Get-Random -Min 12 -Max 840; $total += $size; Write-Host ('[UPLOAD] ' + $f + '  (' + $size.ToString() + 'KB)') -ForegroundColor Gray; Start-Sleep -Milliseconds 250 }; Write-Host ''; Write-Host ('[OK] ' + $files.Count.ToString() + ' files uploaded (' + $total.ToString() + ' KB)') -ForegroundColor Green; Write-Host '[OK] Remote checksum verified' -ForegroundColor Green"
+      ],
+      "codeSpace": { "taskType": "upload", "confirmationRequest": true }
+    },
+    {
+      "label": "Test: Add User",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "Write-Host '============================================' -ForegroundColor Cyan; Write-Host '  Create User Account' -ForegroundColor Cyan; Write-Host '============================================' -ForegroundColor Cyan; Write-Host ''; $email = Read-Host 'Email'; $name = Read-Host 'Display name (optional)'; if (-not $name) { $name = ($email -split '@')[0] }; Write-Host ''; Write-Host 'Creating user...' -ForegroundColor Gray; Start-Sleep -Seconds 1; Write-Host '[OK] User created' -ForegroundColor Green; Write-Host ('  Email: ' + $email) -ForegroundColor Yellow; Write-Host ('  Name:  ' + $name) -ForegroundColor Yellow; Write-Host '  Role:  admin' -ForegroundColor Yellow; Write-Host ''; Write-Host ('Password reset link sent to ' + $email) -ForegroundColor Cyan"
+      ],
+      "codeSpace": { "taskType": "add-user", "confirmationRequest": true }
+    },
+    {
+      "label": "Test: Sync",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "Write-Host '============================================' -ForegroundColor Cyan; Write-Host '  Data Sync Simulation' -ForegroundColor Cyan; Write-Host '============================================' -ForegroundColor Cyan; Write-Host ''; $start = Get-Date; Write-Host '[1/6] Testing connectivity...' -ForegroundColor Gray; Start-Sleep -Seconds 3; Write-Host '[OK] Connected to 5.135.1.236:3306 (MySQL 8.0)' -ForegroundColor Green; Write-Host '[2/6] Fetching remote schema...' -ForegroundColor Gray; $tables = @('prodotti','clienti','ordini','agenti','categorie','listini','magazzino','fatture','documenti','utenti'); foreach ($t in $tables) { Start-Sleep -Milliseconds 500; Write-Host ('  -> ' + $t + ' [schema OK]') -ForegroundColor Gray }; Write-Host '[3/6] Downloading delta changes...' -ForegroundColor Gray; $tables | ForEach-Object { $rows = Get-Random -Min 50 -Max 800; Start-Sleep -Milliseconds 700; Write-Host ('  -> ' + $_ + '_2026.csv  (' + $rows + ' rows)') -ForegroundColor Gray }; Write-Host '[4/6] Validating checksums...' -ForegroundColor Gray; Start-Sleep -Seconds 3; $tables | ForEach-Object { Start-Sleep -Milliseconds 200; Write-Host ('  -> ' + $_ + ' [SHA256 OK]') -ForegroundColor Gray }; Write-Host '[5/6] Importing into local DB...' -ForegroundColor Gray; $totalRows = 0; foreach ($t in $tables) { $rows = Get-Random -Min 80 -Max 600; $totalRows += $rows; Start-Sleep -Milliseconds 700; Write-Host ('  -> ' + $t + ' [' + $rows + ' rows imported]') -ForegroundColor Gray }; Write-Host '[OK] Total: ' -NoNewline; Write-Host ($totalRows.ToString() + ' records') -ForegroundColor Green; Write-Host '[6/6] Updating indexes...' -ForegroundColor Gray; Start-Sleep -Seconds 3; Write-Host '[OK] Indexes rebuilt' -ForegroundColor Green; Write-Host ''; $elapsed = [math]::Round(((Get-Date) - $start).TotalSeconds, 1); Write-Host ('Sync completed in ' + $elapsed.ToString() + 's') -ForegroundColor Green"
+      ],
+      "codeSpace": { "taskType": "sync", "confirmationRequest": true }
+    },
+    {
+      "label": "Test: Push",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "Write-Host '============================================' -ForegroundColor Cyan; Write-Host '  Git Push Simulation' -ForegroundColor Cyan; Write-Host '============================================' -ForegroundColor Cyan; Write-Host ''; Write-Host '[1/3] Checking working tree...' -ForegroundColor Gray; Start-Sleep -Milliseconds 400; Write-Host '[OK] Working tree clean' -ForegroundColor Green; Write-Host '[2/3] Switching to master...' -ForegroundColor Gray; Start-Sleep -Milliseconds 300; Write-Host '[OK] Switched to branch master' -ForegroundColor Green; Write-Host '[3/3] Pushing to origin/master...' -ForegroundColor Gray; Start-Sleep -Milliseconds 500; Write-Host '[OK] Pushed 3 commits to origin/master' -ForegroundColor Green; Write-Host ''; Write-Host '  abc1234 Fix: update config' -ForegroundColor Gray; Write-Host '  def5678 Feat: add export module' -ForegroundColor Gray; Write-Host '  ghi9012 Chore: bump version' -ForegroundColor Gray"
+      ],
+      "codeSpace": { "taskType": "push", "confirmationRequest": true }
+    },
+    {
+      "label": "Test: PowerShell",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "Write-Host '============================================' -ForegroundColor Cyan; Write-Host '  PowerShell Automation Script' -ForegroundColor Cyan; Write-Host '============================================' -ForegroundColor Cyan; Write-Host ''; Write-Host 'System Info:' -ForegroundColor Yellow; Write-Host ('  Hostname : ' + $env:COMPUTERNAME); Write-Host ('  User     : ' + $env:USERNAME); Write-Host ('  OS       : ' + (Get-CimInstance Win32_OperatingSystem | Select-Object -ExpandProperty Caption)); Write-Host ('  PS Ver   : ' + $PSVersionTable.PSVersion.ToString()); Write-Host ''; Write-Host 'Running tasks...' -ForegroundColor Gray; 1..3 | ForEach-Object { Start-Sleep -Milliseconds 300; Write-Host ('  [' + $_ + '/3] Task completed') -ForegroundColor Gray }; Write-Host ''; Write-Host '[OK] All tasks finished successfully' -ForegroundColor Green"
+      ],
+      "codeSpace": { "taskType": "powershell" }
+    },
+    {
+      "label": "Test: Default (no taskType)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "Write-Host '============================================' -ForegroundColor Cyan; Write-Host '  Generic Task (no taskType)' -ForegroundColor Cyan; Write-Host '============================================' -ForegroundColor Cyan; Write-Host ''; Write-Host 'This task has no codeSpace.taskType set.' -ForegroundColor Yellow; Write-Host 'It should render with the default icon.' -ForegroundColor Yellow; Write-Host ''; Write-Host '[OK] Default task executed successfully' -ForegroundColor Green"
+      ],
+      "codeSpace": {}
     }
   ]
 }

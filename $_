@@ -1,0 +1,15 @@
+============================================
+  Data Sync Simulation
+============================================
+
+[1/4] Connecting to remote host...
+[OK] Connected to 5.135.1.236
+[2/4] Downloading CSVs...
+  - (downloaded)
+  - (downloaded)
+  - (downloaded)
+  - (downloaded)
+[3/4] Rebuilding local DB...
+[OK] 1,247 records imported
+[4/4] Cleaning temp files...
+[OK] Sync completed in 2.3s

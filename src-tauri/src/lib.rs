@@ -80,6 +80,7 @@ fn get_task_icon(task_type: &str) -> &str {
         "upload" => "M256 608h512v128H256v-128zm256-320l-128 160h80v128h96V448h80l-128-160z",
         "add-user" => "M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10z M4 20c0-4.42 3.58-8 8-8s8 3.58 8 8",
         "test" => "M8 2v6a6 6 0 0 0 8 0V2 M6 14h12 M10 18h4",
+        "push" => "M21 3H3M18 13L12 7M12 7L6 13M12 7V21",
         "powershell" => "M4 17l6-6-6-6 M12 19h8",
         _ => "M9 8L5 11.6923L9 16M15 8L19 11.6923L15 16", // default: generic double-arrow
     }
