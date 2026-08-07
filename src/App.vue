@@ -414,13 +414,6 @@ const liveTerminals = ref<Record<string, number[]>>({});
 const runningTasks = ref<Record<string, string[]>>({});
 const terminalTabs = ref<Record<string, TerminalTab[]>>({});
 
-async function toggleLiveTerminal(wsName: string) {
-  const hwnds = liveTerminals.value[wsName];
-  if (hwnds && hwnds.length > 0) {
-    await invoke("toggle_live_terminal", { hwnds });
-  }
-}
-
 function openLiveUrl(wsName: string) {
   const tabs = terminalTabs.value[wsName] || [];
   const liveTab = tabs.find(t => t.taskType === "live-server" && t.url);
