@@ -17,13 +17,12 @@ fn main() {
     };
     let empty_arr = vec![];
     let tasks = json["tasks"].as_array().unwrap_or(&empty_arr);
-    let mut ok = 0; let mut bad = 0;
-    println!("=== {} tasks ===\n", tasks.len());
+    let mut ok = 0; let mut bad = 0; let mut skipped = 0;
 
     for t in tasks {
         let label = t["label"].as_str().unwrap_or("?");
         // Skip tasks that are not testable (real dev server, etc.)
-        if label.contains("Avvia CodeSpace") { continue; }
+        if label.contains("Avvia CodeSpace") { skipped += 1; continue; }
         let cmd = t["command"].as_str().unwrap_or("");
         let args: Vec<String> = t["args"].as_array()
             .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
@@ -52,7 +51,7 @@ fn main() {
             }
         }
     }
-    println!("\n=== {} OK / {} FAIL / {} total ===", ok, bad, ok + bad);
+    println!("\n=== {} OK / {} FAIL / {} skipped / {} total ===", ok, bad, skipped, ok + bad + skipped);
     std::process::exit(if bad > 0 { 1 } else { 0 });
 }
 
