@@ -245,7 +245,7 @@ async function toggleTaskView(ws: WorkspaceInfo) {
 async function runTaskExecute(task: TaskItem) {
   const ws = activeWorkspace.value;
   const wsName = ws?.name || "";
-  if (task.task_type) {
+  if (task.task_type && task.task_type !== "live-server") {
     if (!runningTasks.value[wsName]) runningTasks.value[wsName] = [];
     if (!runningTasks.value[wsName].includes(task.task_type)) {
       runningTasks.value[wsName].push(task.task_type);
@@ -556,7 +556,7 @@ onUnmounted(() => {
           </div>
         </div>
         <div
-          v-if="liveTerminals[ws.name]?.length"
+          v-if="(liveTerminals[ws.name]?.length || (terminalTabs[ws.name] || []).some(t => t.taskType === 'live-server'))"
           class="ws-live-btn"
           :style="{ '--ws-color': ws.color || '#0078d4' }"
           title="Toggle live server terminal"
