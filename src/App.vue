@@ -396,6 +396,14 @@ const activeWorkspace = computed(() => {
   return null;
 });
 
+// Banner shows task view workspace if open, otherwise active workspace
+const bannerWorkspace = computed(() => {
+  if (taskView.value && taskViewWsName.value) {
+    return workspaces.value.find(w => w.name === taskViewWsName.value) || activeWorkspace.value;
+  }
+  return activeWorkspace.value;
+});
+
 let unlistenWs: (() => void) | null = null;
 let unlistenLaunched: (() => void) | null = null;
 let unlistenLaunchFailed: (() => void) | null = null;
@@ -591,20 +599,20 @@ onUnmounted(() => {
     <div v-if="statusMessage" class="status-bar">{{ statusMessage }}</div>
 
     <!-- Active workspace banner -->
-    <div v-if="activeWorkspace" class="active-banner" :style="{ '--ws-color': activeWorkspace.color || '#0078d4' }">
+    <div v-if="bannerWorkspace" class="active-banner" :style="{ '--ws-color': bannerWorkspace.color || '#0078d4' }">
       <span class="banner-live-slot">
         <button
-          v-if="liveTerminals[activeWorkspace.name]?.length || (terminalTabs[activeWorkspace.name] || EMPTY_TABS).some(t => t.taskType === 'live-server')"
+          v-if="liveTerminals[bannerWorkspace.name]?.length || (terminalTabs[bannerWorkspace.name] || EMPTY_TABS).some(t => t.taskType === 'live-server')"
           class="banner-live-icon"
           title="Open live server in browser"
-          @click="openLiveUrl(activeWorkspace.name)"
+          @click="openLiveUrl(bannerWorkspace.name)"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="position:relative;z-index:1"><path d="M6.34 4.94a1 1 0 0 1 0 1.41 8.5 8.5 0 0 0 0 11.32 1 1 0 0 1-1.41 1.41C1.02 15.18 1.02 8.85 4.93 4.94a1 1 0 0 1 1.41 0zm12.73 0c3.9 3.9 3.9 10.24 0 14.14a1 1 0 0 1-1.41-1.41 8.5 8.5 0 0 0 0-11.32 1 1 0 0 1 1.41-1.41zM9.31 7.81a1 1 0 0 1 0 1.42 4.5 4.5 0 0 0 0 5.54 1 1 0 0 1-1.41 1.41 6.5 6.5 0 0 1 0-8.37 1 1 0 0 1 1.41 0zm6.96 0a6.5 6.5 0 0 1 0 8.37 1 1 0 0 1-1.41-1.41 4.5 4.5 0 0 0 0-5.54 1 1 0 0 1 1.41-1.42zM12.08 10.58a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>
         </button>
       </span>
-      <span class="active-name">{{ activeWorkspace.name }}</span>
-      <span class="active-path">{{ activeWorkspace.display_path }}</span>
-      <button class="banner-task-btn" :title="taskView ? 'Back to workspaces' : 'Run tasks'" @click="toggleTaskView(activeWorkspace)">
+      <span class="active-name">{{ bannerWorkspace.name }}</span>
+      <span class="active-path">{{ bannerWorkspace.display_path }}</span>
+      <button class="banner-task-btn" :title="taskView ? 'Back to workspaces' : 'Run tasks'" @click="toggleTaskView(bannerWorkspace)">
         <svg v-if="taskView" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         <svg v-else width="20" height="20" viewBox="0 0 512 512" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M127.083 247.824l50.031-76.906s-74.734-29.688-109.547-3.078C32.755 194.465.005 268.184.005 268.184l37.109 21.516c0-.001 46.969-91.016 89.969-41.876zM264.177 384.918l76.906-50.031s29.688 74.734 3.078 109.547c-26.625 34.797-100.344 67.563-100.344 67.563l-21.5-37.109c-.001 0 91.016-46.97 41.86-95.97zM206.692 362.887l-13.203-13.188c-24 62.375-80.375 49.188-80.375 49.188s-13.188-56.375 49.188-80.375l-13.188-13.188c-34.797-6-79.188 35.984-86.391 76.766C55.536 422.872 54.333 457.654 54.333 457.654s34.781-1.188 75.578-8.391c40.797-7.203 82.781-51.594 76.781-86.376zM505.224 6.777C450.786-18.738 312.927 28.98 236.255 130.668c-58.422 77.453-89.688 129.641-89.688 129.641l46.406 46.406 12.313 12.313 46.391 46.391s52.219-31.25 129.672-89.656C483.005 199.074 530.739 61.215 505.224 6.777zM274.63 237.371c-12.813-12.813-12.813-33.594 0-46.406s33.578-12.813 46.406.016c12.813 12.813 12.813 33.578 0 46.391-12.812 12.813-33.593 12.813-46.406 0zM351.552 160.465c-16.563-16.578-16.563-43.422 0-59.984 16.547-16.563 43.406-16.563 59.969 0s16.563 43.406 0 59.984c-16.563 16.547-43.406 16.547-59.969 0z"/></svg>
       </button>
