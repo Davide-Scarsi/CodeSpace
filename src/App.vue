@@ -38,6 +38,7 @@ const workspaces = ref<WorkspaceInfo[]>([]);
 const scanInfo = ref({ has_cache: false, count: 0, last_scan: 0 });
 const scanning = ref(false);
 const searchQuery = ref("");
+const settingsView = ref(false);
 const statusMessage = ref("");
 const dragOver = ref(false);
 
@@ -110,6 +111,7 @@ async function loadScanInfo() {
 
 async function scan(forceFull: boolean) {
   scanning.value = true;
+  settingsView.value = false;
   statusMessage.value = forceFull
     ? "Full scan in progress (scanning all drives)..."
     : "Scanning...";
@@ -381,6 +383,24 @@ async function pickColor(color: string) {
   closeColorModal();
 }
 
+async function reDownloadLatest() {
+  statusMessage.value = "Checking for updates...";
+  try {
+    const release: any = await invoke("check_update");
+    const latestTag = release.tag_name.replace("v", "");
+    const asset = release.assets.find((a: any) => a.name === "CodeSpace_Setup.exe");
+    if (asset) {
+      statusMessage.value = `Downloading v${latestTag}...`;
+      await invoke("download_and_install", { url: asset.browser_download_url });
+      statusMessage.value = `v${latestTag} downloaded. Restarting...`;
+    } else {
+      statusMessage.value = "No installer found in latest release.";
+    }
+  } catch (e) {
+    statusMessage.value = `Error: ${e}`;
+  }
+}
+
 // ── FLIP animation for workspace reordering ──────────────
 const listRef = ref<HTMLElement | null>(null);
 useWorkspaceFlip(listRef);
@@ -581,6 +601,10 @@ onUnmounted(() => {
         </span>
       </div>
 
+      <button class="btn btn-icon" title="Settings" @click="settingsView = !settingsView">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+
       <div class="toolbar-spacer"></div>
 
       <span v-if="scanInfo.has_cache" class="cache-badge">
@@ -611,9 +635,21 @@ onUnmounted(() => {
       </button>
     </div>
 
+    <!-- Settings Page -->
+    <div v-if="settingsView" class="settings-page">
+      <h2 class="settings-title">Settings</h2>
+
+      <div class="settings-section">
+        <h3>Updates</h3>
+        <p class="settings-desc">Current version: <strong>v{{ appVersion }}</strong></p>
+        <button class="btn btn-primary" @click="reDownloadLatest">Re-download latest version</button>
+        <span v-if="statusMessage" class="status-bar" style="margin-top:8px;display:inline-block;position:static">{{ statusMessage }}</span>
+      </div>
+    </div>
+
     <!-- Workspace List -->
     <div
-      v-if="!taskView"
+      v-if="!taskView && !settingsView"
       class="list-container"
       ref="listRef"
       :class="{ 'drag-over': dragOver }"
@@ -927,6 +963,58 @@ body {
 
 .btn-secondary:hover:not(:disabled) {
   background: #30363d;
+}
+
+.btn-icon {
+  background: transparent;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.btn-icon:hover {
+  background: #21262d;
+  color: #c9d1d9;
+  border-color: #484f58;
+}
+
+/* ── Settings Page ───────────────────────────────────── */
+.settings-page {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px;
+}
+
+.settings-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 24px;
+  color: #c9d1d9;
+}
+
+.settings-section {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 400px;
+}
+
+.settings-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: #c9d1d9;
+}
+
+.settings-desc {
+  font-size: 13px;
+  color: #8b949e;
+  margin: 0 0 16px;
 }
 
 /* ── Search ───────────────────────────────────────────── */

@@ -155,7 +155,6 @@ function colorizeOutput(text: string, wsColor: string): string {
   const y = ansiFg("#d29922");
   const m = ansiFg("#bc8cff");
   const gray = ansiFg("#8b949e");
-  const c = ansiFg("#39c5cf");
 
   let out = text;
 
