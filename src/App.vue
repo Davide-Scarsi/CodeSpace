@@ -526,6 +526,7 @@ onUnmounted(() => {
         class="ws-card"
         :data-ws-name="ws.name"
         :class="{ 'ws-open': ws.is_open, 'ws-active': ws.is_open && ws.name === activeWorkspace?.name, 'ws-launching': launching[ws.name] }"
+        :style="{ '--ws-color': ws.color || '#0078d4' }"
         @click="handleRowClick(ws)"
       >
         <div class="ws-traffic-light" :class="{ open: ws.is_open, active: ws.is_open && ws.name === activeWorkspace?.name }">
@@ -956,23 +957,23 @@ body {
 }
 
 .ws-card.ws-open {
-  background: #0d1a14;
-  border-color: #1a3a2a;
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.2);
 }
 
 .ws-card.ws-open:hover {
-  background: #111f19;
-  border-color: #1f4d33;
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.25);
 }
 
 .ws-card.ws-active {
-  background: #0d1f2d;
-  border-color: #1a3a5a;
+  background: color-mix(in srgb, var(--ws-color, #0078d4) 12%, transparent);
+  border-color: color-mix(in srgb, var(--ws-color, #0078d4) 35%, transparent);
 }
 
 .ws-card.ws-active:hover {
-  background: #112538;
-  border-color: #1f4d7a;
+  background: color-mix(in srgb, var(--ws-color, #0078d4) 18%, transparent);
+  border-color: color-mix(in srgb, var(--ws-color, #0078d4) 50%, transparent);
 }
 
 /* ── Traffic light ────────────────────────────────────── */
