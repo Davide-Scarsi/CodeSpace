@@ -444,17 +444,18 @@ onUnmounted(() => {
           <button class="ws-btn" title="Workspace settings" @click.stop="openColorModal(ws)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
-          <!-- Spinner while launching, launch button otherwise -->
-          <div v-if="launching[ws.name]" class="ws-spinner" title="Opening...">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-              <path d="M21 12a9 9 0 1 1-6.8-8.7" stroke-dasharray="60" stroke-dashoffset="20">
-                <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/>
-              </path>
-            </svg>
+          <div class="ws-launch-slot">
+            <button v-if="!launching[ws.name]" class="ws-btn ws-btn-launch" title="Open in VS Code" @click.stop="launchWorkspace(ws.path, ws.name)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </button>
+            <div v-else class="ws-spinner" title="Opening..." role="status">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <path d="M21 12a9 9 0 1 1-6.8-8.7" stroke-dasharray="60" stroke-dashoffset="20">
+                  <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/>
+                </path>
+              </svg>
+            </div>
           </div>
-          <button v-else class="ws-btn ws-btn-launch" title="Open in VS Code" @click.stop="launchWorkspace(ws.path, ws.name)">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-          </button>
         </div>
         <div
           v-if="liveTerminals[ws.name]?.length"
@@ -877,12 +878,15 @@ body {
   gap: 4px;
   opacity: 0;
   transition: opacity 0.12s;
+  align-items: center;
+  position: relative;
 }
 
 .ws-card:hover .ws-actions {
   opacity: 1;
 }
 
+/* Keep actions visible during launching, like before */
 .ws-card.ws-launching .ws-actions {
   opacity: 1;
 }
@@ -901,6 +905,28 @@ body {
   position: relative;
   overflow: hidden;
 }
+
+/* Spinner slot shown while launching; kept separate from .ws-actions so gear/settings stays hidden */
+.ws-launch-slot {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.ws-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
 
 .ws-live-btn::after {
   content: "";
