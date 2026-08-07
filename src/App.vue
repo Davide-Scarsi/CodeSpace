@@ -492,7 +492,7 @@ onUnmounted(() => {
     <div v-if="activeWorkspace" class="active-banner" :style="{ '--ws-color': activeWorkspace.color || '#0078d4' }">
       <span class="banner-live-slot">
         <button
-          v-if="liveTerminals[activeWorkspace.name]?.length"
+          v-if="liveTerminals[activeWorkspace.name]?.length || (terminalTabs[activeWorkspace.name] || []).some(t => t.taskType === 'live-server')"
           class="banner-live-icon"
           title="Toggle live server terminal"
           @click="toggleLiveTerminal(activeWorkspace.name)"
