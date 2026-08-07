@@ -1034,15 +1034,25 @@ fn get_workspace_tasks(workspace_path: String) -> Result<Vec<TaskInfo>, String> 
         for t in tasks {
             if t.task_type.as_deref() == Some("shell") {
                 if let (Some(label), Some(cmd_name)) = (t.label, t.command) {
-                    let args = t.args.unwrap_or_default();
+                    let user_home = std::env::var("USERPROFILE")
+                        .or_else(|_| std::env::var("HOME"))
+                        .unwrap_or_default();
+                    let resolve_vars = |s: &str| -> String {
+                        s.replace("${workspaceFolder}", &root.to_string_lossy().to_string())
+                         .replace("${userHome}", &user_home)
+                         .replace("${env:USERPROFILE}", &std::env::var("USERPROFILE").unwrap_or_default())
+                         .replace("${env:HOME}", &std::env::var("HOME").unwrap_or_default())
+                    };
+                    let args: Vec<String> = t.args.unwrap_or_default().iter().map(|a| resolve_vars(a)).collect();
+                    let cmd_name = resolve_vars(&cmd_name);
                     let cwd = t.options.and_then(|o| o.cwd)
+                        .map(|d| resolve_vars(&d))
                         .map(|d| {
-                            let resolved = d.replace("${workspaceFolder}", &root.to_string_lossy().to_string());
-                            let p = Path::new(&resolved);
+                            let p = Path::new(&d);
                             if p.is_relative() {
                                 root.join(p).to_string_lossy().to_string()
                             } else {
-                                resolved
+                                d
                             }
                         })
                         .or_else(|| Some(root.to_string_lossy().to_string()));

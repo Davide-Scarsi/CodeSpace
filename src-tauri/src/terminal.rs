@@ -17,7 +17,14 @@ pub fn terminal_spawn(app: tauri::AppHandle, terminal_id: String, command: Strin
     let (cmd_name, final_args): (String, Vec<String>) = if args.is_empty() && command.contains(' ') {
         ("powershell".into(), vec!["-NoProfile".into(), "-Command".into(), format!("{} *>&1", command)])
     } else {
-        if is_ps && !args.is_empty() { let last = args.len() - 1; args[last] = format!("{} *>&1", args[last]); }
+        if is_ps && !args.is_empty() {
+            // Don't append *>&1 to -File args (it breaks the path)
+            let last_is_file = args.windows(2).any(|w| w[0].eq_ignore_ascii_case("-File"));
+            if !last_is_file {
+                let last = args.len() - 1;
+                args[last] = format!("{} *>&1", args[last]);
+            }
+        }
         (command, args)
     };
     let mut cmd = Command::new(&cmd_name);

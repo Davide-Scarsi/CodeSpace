@@ -7,6 +7,7 @@ const persistedTabId = ref<string | null>(null);
 
 <script setup lang="ts">
 import { watch, onMounted, onUnmounted, nextTick } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { listen } from "@tauri-apps/api/event";
@@ -105,6 +106,25 @@ watch(activeTabId, async (id) => {
   });
   term.loadAddon(fitAddon);
   term.open(el);
+
+  // Copy on Ctrl+C when text is selected
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.ctrlKey && e.key === 'c' && term!.hasSelection()) {
+      const sel = term!.getSelection();
+      navigator.clipboard.writeText(sel).catch(() => {});
+      return false; // prevent default (don't send to process)
+    }
+    if (e.ctrlKey && e.key === 'v') {
+      navigator.clipboard.readText().then((text) => {
+        if (activeTabId.value === id) {
+          invoke("terminal_write", { terminalId: id, data: text }).catch(() => {});
+        }
+      }).catch(() => {});
+      return false;
+    }
+    return true;
+  });
+
   el.style.minHeight = "200px";
   setTimeout(() => { try { fitAddon.fit(); } catch (_) {} }, 100);
   const cached = outputCache.value[id] || "";
@@ -134,8 +154,15 @@ function colorizeOutput(text: string, wsColor: string): string {
   const y = ansiFg("#d29922");
   const m = ansiFg("#bc8cff");
   const gray = ansiFg("#8b949e");
+  const c = ansiFg("#39c5cf");
 
   let out = text;
+
+  // Step markers: >>> ... (workspace color)
+  out = out.replace(/^>>>.*$/gm, (s) => `${ws}${s}${ANSI_RESET}`);
+
+  // Lines starting with OK or ending with OK (green)
+  out = out.replace(/^OK\b.*$/gm, (s) => `${g}${s}${ANSI_RESET}`);
 
   // Separators (workspace color) — before other patterns to avoid conflicts
   out = out.replace(/={3,}/g, (s) => `${ws}${s}${ANSI_RESET}`);
