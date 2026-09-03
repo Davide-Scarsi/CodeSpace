@@ -10,6 +10,7 @@ launch them, and run their tasks — all from one place.
 - Brings an open workspace to the front; click again to minimize it
 - Lets you give each workspace its own color, so you can tell them apart at a glance
 - Create a new workspace by simply dragging a folder into the app
+- Copy a workspace's folder path to the clipboard with one click
 
 ## Tasks
 
@@ -17,6 +18,9 @@ launch them, and run their tasks — all from one place.
 - Each workspace has its own set of tabs, with colored output for successes, warnings and errors
 - Tasks that start a local server open the right page in your browser automatically
 - Create ready-made sample tasks with the "New task" button — no manual setup needed
+- Tasks can use the vault: a task can pull a saved credential (for example the login
+  for a database) and store new ones back — you pick which credential to use right
+  in the terminal
 - Tasks whose files are missing are shown grayed out and cannot be started
 - Tasks can be deleted from the list; tasks that change important data ask for confirmation first
 
@@ -28,6 +32,9 @@ launch them, and run their tasks — all from one place.
   with no extra password to remember
 - Credentials are encrypted on your computer and never leave it
 - Each workspace has its own separate vault
+- Your tasks can use the vault: when a task needs a credential it asks you which
+  one to use, and when it creates a new account it can save it here automatically —
+  everything is confirmed in the terminal, and only while the vault is unlocked
 - Copy any field or note to the clipboard with one click
 - Lock the vault again whenever you want, straight from the toolbar
 - Export all your credentials to a single file and import them back on another computer
