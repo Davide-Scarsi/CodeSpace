@@ -17,7 +17,9 @@ launch them, and run their tasks — all from one place.
 - Run the tasks of your projects directly from the app, in a built-in terminal
 - Each workspace has its own set of tabs, with colored output for successes, warnings and errors
 - Tasks that start a local server open the right page in your browser automatically
-- Create ready-made sample tasks with the "New task" button — no manual setup needed
+- Create new tasks by chatting with the built-in assistant: pick what you need, answer a
+  few one-click questions, review the proposed task and add it — it only suggests tasks
+  that make sense for your project
 - Tasks can use the vault: a task can pull a saved credential (for example the login
   for a database) and store new ones back — you pick which credential to use right
   in the terminal
@@ -38,6 +40,17 @@ launch them, and run their tasks — all from one place.
 - Copy any field or note to the clipboard with one click
 - Lock the vault again whenever you want, straight from the toolbar
 - Export all your credentials to a single file and import them back on another computer
+
+## AI assistant
+
+- Connect CodeSpace to Claude: use your Claude plan through Claude Code, or an Anthropic
+  API key kept safely in Windows Credential Manager
+- Choose the model from the Settings
+- The assistant reads your project to understand it, but never changes your files:
+  CodeSpace checks every task before saving it
+- The assistant takes on the color of your workspace
+- Add your own task recipes so the assistant follows your conventions
+- CodeSpace tells you when a newer Claude Code is available and updates it in one click
 
 ## Built-in extras
 
