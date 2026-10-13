@@ -1,7 +1,8 @@
 # CodeSpace
 
 CodeSpace is a Windows desktop app that helps you organize your VS Code workspaces,
-launch them, and run their tasks — all from one place.
+launch them, run their tasks and keep track of your work — with an AI assistant
+that knows your projects.
 
 ## Workspaces
 
@@ -17,14 +18,55 @@ launch them, and run their tasks — all from one place.
 - Run the tasks of your projects directly from the app, in a built-in terminal
 - Each workspace has its own set of tabs, with colored output for successes, warnings and errors
 - Tasks that start a local server open the right page in your browser automatically
-- Create new tasks by chatting with the built-in assistant: pick what you need, answer a
-  few one-click questions, review the proposed task and add it — it only suggests tasks
-  that make sense for your project
+- Create new tasks by asking the assistant: tell it what you need, review the proposed
+  task and add it with one click — it only suggests tasks that make sense for your project
 - Tasks can use the vault: a task can pull a saved credential (for example the login
   for a database) and store new ones back — you pick which credential to use right
   in the terminal
 - Tasks whose files are missing are shown grayed out and cannot be started
 - Tasks can be deleted from the list; tasks that change important data ask for confirmation first
+
+## AI assistant
+
+- Always open on the right side of the app, with one conversation per project; resize it
+  or fold it away whenever you like
+- It knows where you are: the project, the view you are in, the Todo you selected and
+  the last task you ran — so "close it" or "why didn't it start?" just work
+- It writes for you — tasks, Todos, plans, closing notes — and you approve each proposal
+  with one click; CodeSpace checks everything before saving it
+- With no workspace active it becomes the assistant of all your projects: ask what you
+  worked on lately, which Todos are open, or whether you already solved something elsewhere
+- Shows what it is doing while you wait: the files it reads and what it searches
+- Uses a fast model for quick answers and an accurate one for code and scripts;
+  ask it to "think harder" when you want a better answer
+- Call your own agents by typing `@` in the chat
+- Works with Claude (through Claude Code or an API key) and, experimentally,
+  with GitHub Copilot
+- It reads your project to understand it, but never changes your files and never
+  sees your credentials
+
+## Todos
+
+- Keep your work as Todos for each project: the request, what was understood,
+  the plan, what you found along the way and how it ended
+- Paste a request (an email, a ticket, a few notes) and the assistant turns it into a
+  Todo with a plan based on your real project
+- When the work is done, the assistant writes the closing summary and the lessons learned
+- Attach files to a Todo by dropping them on the window
+- "Today" writes your end-of-day report from the Todos you worked on and your commits
+- Todos stay private on your computer: they are kept out of git
+
+## Project knowledge
+
+- Every project gets a profile with its stack, its history and the traps and lessons
+  learned, kept up to date by CodeSpace
+- Each closed Todo adds its summary and lessons to the project's history
+- Knowledge sync adds the history from your git commits, only when something changed
+  and within a small budget
+- The knowledge map shows, as a network, everything CodeSpace knows about each project —
+  how far it is mapped and what is still missing
+- Your other AI tools can use it too: Copilot in VS Code and Claude Code can read and
+  update your Todos and project knowledge, set up with one click from the Settings
 
 ## Vault
 
@@ -40,17 +82,6 @@ launch them, and run their tasks — all from one place.
 - Copy any field or note to the clipboard with one click
 - Lock the vault again whenever you want, straight from the toolbar
 - Export all your credentials to a single file and import them back on another computer
-
-## AI assistant
-
-- Connect CodeSpace to Claude: use your Claude plan through Claude Code, or an Anthropic
-  API key kept safely in Windows Credential Manager
-- Choose the model from the Settings
-- The assistant reads your project to understand it, but never changes your files:
-  CodeSpace checks every task before saving it
-- The assistant takes on the color of your workspace
-- Add your own task recipes so the assistant follows your conventions
-- CodeSpace tells you when a newer Claude Code is available and updates it in one click
 
 ## Built-in extras
 
