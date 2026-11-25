@@ -1,8 +1,18 @@
-# CodeSpace
+<p align="center">
+  <img src="assets/logo.png" alt="CodeSpace logo: an astronaut whose visor reflects a galaxy" width="160">
+</p>
 
-CodeSpace is a Windows desktop app that helps you organize your VS Code workspaces,
-launch them, run their tasks and keep track of your work — with an AI assistant
-that knows your projects.
+<h1 align="center">CodeSpace</h1>
+
+<p align="center">
+  A Windows desktop app that helps you organize your VS Code workspaces, launch them,
+  run their tasks, follow their git history and keep track of your work — with an AI
+  assistant that knows your projects.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Davide-Scarsi/CodeSpace/releases/latest"><b>Download the latest version</b></a>
+</p>
 
 ## Workspaces
 
@@ -55,6 +65,23 @@ that knows your projects.
 - Attach files to a Todo by dropping them on the window
 - "Today" writes your end-of-day report from the Todos you worked on and your commits
 - Todos stay private on your computer: they are kept out of git
+
+## Git
+
+- Every workspace has a Git view, first in the workspace bar: the branch you are on,
+  the Todo it belongs to, what is waiting to be sent or received, and the changes
+  in progress at a glance
+- Commit, sync and merge with the assistant: it reads your changes and the Todo of the
+  branch, proposes the commit message in the style of your project, and you confirm it;
+  merges are checked for conflicts before anything happens, and nothing is ever forced
+- A map of how your project works, rebuilt by the AI from the code: who uses it, what
+  they see, what the system does, where the data lives and which outside services it
+  talks to — your changes and commits light up the parts they touch
+- The history of your branches, each with its Todo, the releases and the work in progress;
+  open any commit to see what it changed, with files and differences only when you want them
+- Switch branch from anywhere with Ctrl+B; your unsaved work comes along, or is set aside
+  safely and offered back when you return
+- No AI provider? Sync and merge still work, and you write the commit message yourself
 
 ## Project knowledge
 
